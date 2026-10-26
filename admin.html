@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Organizador · Campeonato de Lucha de Brazos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Panel del organizador</div>
+      <h1>Campeonato de <span>Lucha de Brazos</span> 2026</h1>
+      <p class="meta"><span id="meta"></span> <span class="stamp" id="sync"></span></p>
+    </div>
+    <nav class="tabs" id="tabs" hidden>
+      <button data-act="nav" data-view="competidores">Competidores</button>
+      <button data-act="nav" data-view="llaves">Llaves en vivo</button>
+      <button data-act="nav" data-view="podio">Podio</button>
+      <button data-act="nav" data-view="compartir">Compartir</button>
+    </nav>
+  </div>
+</header>
+<main><div class="wrap" id="app"></div></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample} from '/motor.js';
+import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
+
+const $ = id => document.getElementById(id);
+let S = null, version = 0, clave = '';
+const ui = {view:'llaves', cat:'vivo', confirm:null, filter:'todas', importMsg:null};
+const pending = [];
+let busy = false, syncState = 'ok';
+
+/* ---------- conexión con el servidor ---------- */
+async function api(method, body){
+  const r = await fetch('/api/estado', {method, cache:'no-store', headers:{'Content-Type':'application/json', 'x-clave':clave}, body:body ? JSON.stringify(body) : undefined});
+  let j = {};
+  try { j = await r.json(); } catch {}
+  return {status:r.status, ...j};
+}
+
+// Cada cambio se aplica al instante en pantalla y se guarda en orden.
+// Si entretanto llegó una inscripción, se toma el estado nuevo y se vuelven a aplicar los cambios pendientes.
+function mutate(fn){
+  fn(S);
+  pending.push(fn);
+  render();
+  flush();
+}
+async function flush(){
+  if (busy) return;
+  busy = true;
+  showSync('saving');
+  while (pending.length){
+    const n = pending.length;
+    let r;
+    try { r = await api('PUT', {version, state:S}); } catch { r = {status:0}; }
+    if (r.status === 200){ version = r.version; pending.splice(0, n); continue; }
+    if (r.status === 409){
+      S = clean(r.state); version = r.version;
+      for (const fn of pending) fn(S);
+      render();
+      continue;
+    }
+    showSync('error', r.error);
+    busy = false;
+    setTimeout(flush, 4000);
+    return;
+  }
+  busy = false;
+  showSync('ok');
+}
+function showSync(st, msg){
+  syncState = st;
+  $('sync').textContent = {ok:'· Guardado', saving:'· Guardando…', error:`· No se pudo guardar${msg ? ': ' + msg : ''}. Reintentando…`}[st];
+}
+
+async function poll(){
+  if (busy || pending.length || !S) return;
+  try {
+    const r = await api('GET');
+    if (r.status === 200 && r.version !== version && !pending.length && !busy){
+      S = clean(r.state); version = r.version;
+      const typing = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+      if (!typing) render();
+    }
+  } catch {}
+}
+
+/* ---------- ingreso ---------- */
+function viewLogin(msg){
+  $('tabs').hidden = true;
+  $('app').innerHTML = `<section class="panel login">
+    <h2>Entrar</h2>
+    <p class="muted">Escribe la clave de organizador que configuraste en Vercel.</p>
+    ${msg ? `<div class="msg err">${esc(msg)}</div>` : ''}
+    <form id="login" novalidate><label class="f">Clave<input type="password" id="clave" autocomplete="current-password" required></label>
+    <div class="row"><button class="btn primary" type="submit">Entrar</button></div></form>
+  </section>`;
+  $('clave').focus();
+}
+async function login(c){
+  clave = c;
+  let r;
+  try { r = await api('GET'); } catch { r = {status:0, error:'No hay conexión.'}; }
+  if (r.status !== 200){
+    try { sessionStorage.removeItem('aw-clave'); } catch {}
+    return viewLogin(r.status === 401 ? 'Clave incorrecta.' : r.error || 'No se pudo conectar.');
+  }
+  try { sessionStorage.setItem('aw-clave', c); } catch {}
+  S = clean(r.state); version = r.version;
+  $('tabs').hidden = false;
+  showSync('ok');
+  render();
+  setInterval(() => { if (!document.hidden) poll(); }, 4000);
+}
+
+/* ---------- importar desde Google Forms ---------- */
+// Lee filas pegadas desde la hoja de respuestas (separadas por tabulación) y ubica cada columna por su título.
+// Una pregunta puede repetirse en varias secciones del formulario: se toman todas sus columnas.
+function importRows(st, text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return {type:'err', text:'Pega también la fila de títulos y al menos una respuesta.'};
+  const head = lines[0].split('\t').map(h => h.trim().toLowerCase());
+  const cols = re => head.map((h, i) => re.test(h) ? i : -1).filter(i => i >= 0);
+  const ci = {name:cols(/nombre/), career:cols(/^¿?\s*carrera/), other:cols(/cu[aá]l/), year:cols(/año|ano\b/), section:cols(/secci[oó]n/), weight:cols(/peso/).filter(i => !/categor/.test(head[i])), cats:cols(/categor/)};
+  if (!ci.name.length || !ci.cats.length) return {type:'err', text:'No encontré las columnas "Nombre completo" y "Categorías". Revisa que copiaste la fila de títulos.'};
+  let added = 0;
+  const notes = [];
+  for (const line of lines.slice(1)){
+    const c = line.split('\t').map(x => x.trim());
+    const get = is => is.map(i => c[i] || '').filter(Boolean).join(', ');
+    const name = get(ci.name).replace(/\s+/g, ' ');
+    if (!name || st.competitors.some(x => x.name.toLowerCase() === name.toLowerCase())) continue;
+    const careerRaw = get(ci.career);
+    const isMeca = /mec[aá]nica automotriz/i.test(careerRaw);
+    const career = isMeca ? MECA : (get(ci.other) || careerRaw || 'Otra carrera');
+    const weight = parseFloat(get(ci.weight).replace(',', '.').replace(/[^0-9.]/g, ''));
+    const sel = get(ci.cats).toLowerCase();
+    const cats = [];
+    const wantPeso = /peso/.test(sel);
+    if (wantPeso && !isMeca) notes.push(`${esc(name)}: las categorías de peso son solo para ${MECA}; quedó solo en las libres.`);
+    if (wantPeso && isMeca && !(weight >= 30)) notes.push(`${esc(name)}: sin peso válido, no se asignó categoría de peso.`);
+    if (wantPeso && isMeca && weight >= 30) cats.push(weightCat(weight) + 'd');
+    if (/libre[^,]*derech/.test(sel)) cats.push('ld');
+    if (/libre[^,]*izquier/.test(sel)) cats.push('li');
+    const ok = cats.filter(id => { const e = cupoError(st, id); if (e) notes.push(`${esc(name)}: ${esc(e)}`); return !e; });
+    if (!ok.length){ notes.push(`${esc(name)}: no quedó en ninguna categoría.`); continue; }
+    const year = get(ci.year), section = get(ci.section);
+    st.competitors.push({id:uid(), name, career, club:`${career}${year ? ' · ' + year + ' año' : ''}${section ? ' · Sec. ' + section : ''}`, weight:weight >= 30 ? Math.round(weight * 10) / 10 : 0, cats:ok, weighed:false, at:Date.now()});
+    added++;
+  }
+  return {type:notes.length ? 'err' : 'ok', text:`Se agregaron ${added} competidor${added === 1 ? '' : 'es'}.` + (notes.length ? '<br>Revisa: ' + notes.join('<br>') : '')};
+}
+
+/* ---------- vistas ---------- */
+function confirmBtn(key, label, yes, act, extra = ''){
+  if (ui.confirm === key) return `<span class="confirm">¿Seguro? <button class="btn small primary" data-act="${act}" ${extra}>${yes}</button><button class="btn small" data-act="cancel">Cancelar</button></span>`;
+  return `<button class="btn small danger" data-act="ask" data-key="${key}">${label}</button>`;
+}
+
+function render(){
+  if (!S) return;
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-current', String(b.dataset.view === ui.view)));
+  const live = CATS.filter(c => catStatus(S, c.id) === 'live').length;
+  $('meta').textContent = `${S.competitors.length} inscritos · ${CATS.length} llaves · ${live} en curso`;
+  const banner = S.example ? `<div class="banner"><span><strong>Datos de prueba.</strong> Los competidores y resultados son inventados. Bórralos antes de abrir las inscripciones.</span>${confirmBtn('clear', 'Borrar todo y empezar de cero', 'Sí, borrar todo', 'clear-all')}</div>` : '';
+  const app = $('app');
+  const scrolls = [...app.querySelectorAll('.rounds')].map(el => el.scrollLeft);
+  app.innerHTML = banner + ({competidores:viewCompetidores, llaves:viewLlaves, podio:() => viewPodio(S), compartir:viewCompartir}[ui.view])();
+  app.querySelectorAll('.rounds').forEach((el, i) => { el.scrollLeft = scrolls[i] || 0; });
+  if (ui.view === 'compartir') drawQR();
+}
+
+function viewLlaves(){
+  return catChips(S, ui.cat) + (ui.cat === 'vivo' ? viewVivo(S, true) : viewCategoria(S, ui.cat, true, confirmBtn));
+}
+
+function viewCompetidores(){
+  const list = S.competitors.filter(c => ui.filter === 'todas' || c.cats.includes(ui.filter)).slice().sort((a, b) => a.weight - b.weight);
+  const opts = ['<option value="todas">Todas las categorías</option>'].concat(CATS.map(c => `<option value="${c.id}" ${ui.filter === c.id ? 'selected' : ''}>${c.label} (${members(S, c.id).length})</option>`)).join('');
+  const rows = list.map(c => `<tr>
+      <td><strong>${esc(c.name)}</strong></td>
+      <td>${esc(c.club || '—')}</td>
+      <td class="kg">${c.weight ? c.weight.toFixed(1) + ' kg' : '—'}</td>
+      <td>${c.cats.map(id => `<span class="chip ${catById(id).arm === 'd' ? 'ld' : 'li'}">${catById(id).short}</span>`).join('')}</td>
+      <td><label class="check"><input type="checkbox" data-act="weighed" data-id="${c.id}" ${c.weighed ? 'checked' : ''} aria-label="Pesaje de ${esc(c.name)}"></label></td>
+      <td>${confirmBtn('del-' + c.id, 'Quitar', 'Sí, quitar', 'del', `data-id="${c.id}"`)}</td>
+    </tr>`).join('');
+  const imp = ui.importMsg; ui.importMsg = null;
+  const empty = !S.competitors.length && !S.example
+    ? `<div class="banner"><span>Aún no hay inscritos. Comparte el link de la pestaña <strong>Compartir</strong>. Si quieres probar la app antes, carga datos inventados.</span><button class="btn small" data-act="example">Cargar datos de prueba</button></div>` : '';
+  return `${empty}<section class="panel">
+    <div class="row" style="justify-content:space-between"><h2>Competidores</h2>
+      <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div>
+    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. Marca el pesaje cuando cada uno pase por la balanza.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Nombre</th><th>Carrera y curso</th><th>Peso</th><th>Categorías</th><th>Pesaje</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="empty">Nadie inscrito todavía.</td></tr>'}</tbody>
+    </table></div>
+  </section>
+  <section class="panel"><h3>Cupos</h3><div class="cupos">${viewCupos(S)}</div></section>
+  <details class="panel imp" ${imp ? 'open' : ''}>
+    <summary><h3>Importar inscritos desde Google Forms</h3></summary>
+    <p class="hint">Si alguien se inscribió en el formulario antiguo: en la hoja de respuestas selecciona todo (incluida la fila de títulos), cópialo y pégalo aquí. Se agregan solo los que no estén ya en la lista.</p>
+    <textarea id="imp-text" rows="5" placeholder="Pega aquí las filas copiadas de Google Sheets"></textarea>
+    <div class="row"><button class="btn primary" data-act="import">Importar</button></div>
+    ${imp ? `<div class="msg ${imp.type}">${imp.text}</div>` : ''}
+  </details>`;
+}
+
+function viewCompartir(){
+  const base = location.origin;
+  const link = (title, url, hint, qr) => `<section class="panel"><h3>${title}</h3>
+    <div class="qr">${qr ? '<div id="qrbox" role="img" aria-label="Código QR de la ficha de inscripción"></div>' : ''}
+      <div style="display:flex;flex-direction:column;gap:8px;min-width:0;flex:1">
+        <span class="link">${url}</span>
+        <div class="row"><button class="btn small" data-act="copy" data-url="${url}">Copiar link</button><a class="btn small" href="${url}" target="_blank" rel="noopener">Abrir</a></div>
+        <span class="hint">${hint}</span>
+      </div></div></section>`;
+  return `<h2>Compartir</h2>
+    ${link('Ficha de inscripción', base + '/', 'Para los alumnos. Imprime el QR o compártelo por WhatsApp.', true)}
+    ${link('Llaves en vivo', base + '/llaves', 'Para el público: ven las llaves y resultados desde su celular, sin poder cambiar nada. También sirve para proyectar.', false)}
+    ${link('Este panel', base + '/admin', 'Solo para ti y quien te ayude a arbitrar. Pide la clave.', false)}`;
+}
+
+function drawQR(){
+  const box = $('qrbox');
+  if (!box || box.childElementCount) return;
+  if (window.QRCode) new QRCode(box, {text:location.origin + '/', width:140, height:140, colorDark:'#15181D', colorLight:'#FFFFFF', correctLevel:QRCode.CorrectLevel.M});
+  else box.innerHTML = '<span class="hint">No se pudo cargar el QR. Recarga la página.</span>';
+}
+
+/* ---------- acciones ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]');
+  if (!t || !S) return;
+  const a = t.dataset.act, d = t.dataset;
+  if (a === 'weighed') return;
+  if (a === 'nav'){ ui.view = d.view; ui.confirm = null; }
+  else if (a === 'cat'){ ui.cat = d.cat; ui.confirm = null; }
+  else if (a === 'ask'){ ui.confirm = d.key; }
+  else if (a === 'cancel'){ ui.confirm = null; }
+  else if (a === 'clear-all'){ ui.confirm = null; return mutate(st => { st.competitors = []; st.brackets = {}; delete st.example; }); }
+  else if (a === 'example'){ const ex = seedExample(); return mutate(st => { Object.assign(st, structuredClone(ex)); }); }
+  else if (a === 'import'){
+    const text = $('imp-text').value;
+    return mutate(st => { ui.importMsg = importRows(st, text); });
+  }
+  else if (a === 'del'){ ui.confirm = null; return mutate(st => { st.competitors = st.competitors.filter(c => c.id !== d.id); }); }
+  else if (a === 'gen' || a === 'reset'){
+    ui.confirm = null;
+    return mutate(st => { if (a === 'reset' || !st.brackets[d.cat]) st.brackets[d.cat] = makeBracket(members(st, d.cat)); });
+  }
+  else if (a === 'win' || a === 'undo'){
+    return mutate(st => {
+      const br = st.brackets[d.cat];
+      if (!br) return;
+      const m = compute(br).M[d.m];
+      // Si al reaplicar el cruce ya cambió (otro dispositivo marcó primero), no se hace nada.
+      if (a === 'win'){ if (!m.done && m.s.includes(d.p)) addWin(br, m, d.p); }
+      else undoWin(br, m);
+      compute(br);
+    });
+  }
+  else if (a === 'copy'){
+    try { navigator.clipboard.writeText(d.url).then(() => { t.textContent = 'Copiado'; }); } catch {}
+    return;
+  }
+  render();
+});
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (!S) return;
+  if (t.id === 'filter'){ ui.filter = t.value; render(); }
+  if (t.dataset.act === 'weighed'){ const id = t.dataset.id, val = t.checked; mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) c.weighed = val; }); }
+});
+
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'login') return;
+  e.preventDefault();
+  login($('clave').value);
+});
+
+let saved = '';
+try { saved = sessionStorage.getItem('aw-clave') || ''; } catch {}
+if (saved) login(saved); else viewLogin();
+</script>
+</body>
+</html>

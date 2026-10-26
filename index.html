@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inscripción · Campeonato de Lucha de Brazos</title>
+<meta name="description" content="Ficha de inscripción del Campeonato de Lucha de Brazos 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Doble eliminación · Inacap</div>
+      <h1>Campeonato de <span>Lucha de Brazos</span> 2026</h1>
+    </div>
+    <nav class="tabs">
+      <a href="/" aria-current="page">Inscripción</a>
+      <a href="/llaves">Llaves en vivo</a>
+    </nav>
+  </div>
+</header>
+<main><div class="wrap">
+  <div class="grid2">
+    <section class="panel" aria-labelledby="h-ins">
+      <div><h2 id="h-ins">Ficha de inscripción</h2><p class="muted">Completa tus datos y elige tus categorías.</p></div>
+      <div id="f-msg" class="msg" hidden></div>
+      <form id="form-ins" novalidate>
+        <label class="f">Nombre completo<input type="text" id="f-name" autocomplete="name" maxlength="80" placeholder="Ej: Martín Soto" required></label>
+        <div class="two">
+          <label class="f">Carrera<select id="f-career"><option value="meca">Mecánica Automotriz</option><option value="otra">Otra carrera de Inacap</option></select></label>
+          <label class="f" id="f-other-wrap" hidden>¿Cuál carrera?<input type="text" id="f-other" maxlength="80" placeholder="Ej: Electricidad Industrial"></label>
+        </div>
+        <div class="two">
+          <label class="f">Año de carrera<select id="f-year"><option>1°</option><option>2°</option><option>3°</option><option>4°</option></select></label>
+          <label class="f">Sección<input type="text" id="f-section" maxlength="20" placeholder="Ej: 201"></label>
+        </div>
+        <label class="f">Peso (kg)<input type="number" id="f-weight" inputmode="decimal" step="0.1" min="30" max="250" placeholder="Ej: 78.5" required></label>
+        <fieldset>
+          <legend>Categorías</legend>
+          <span class="hint" id="f-peso-label">Tu categoría de peso aparece aquí al escribir tu peso.</span>
+          <span class="hint" id="f-meca-only" hidden>Las categorías de peso son solo para alumnos de Mecánica Automotriz. Puedes inscribirte en las libres.</span>
+          <label class="check"><input type="checkbox" id="f-cat-pd" checked> Categoría de peso (brazo derecho)</label>
+          <label class="check"><input type="checkbox" id="f-cat-ld"> Libre brazo derecho</label>
+          <label class="check"><input type="checkbox" id="f-cat-li"> Libre brazo izquierdo</label>
+          <span class="hint">Puedes marcar varias. La categoría de peso se confirma en el pesaje del día del campeonato.</span>
+        </fieldset>
+        <div class="row"><button class="btn primary" type="submit" id="f-send">Inscribirme</button></div>
+      </form>
+    </section>
+    <section class="panel" aria-labelledby="h-cupos">
+      <h3 id="h-cupos">Cupos por categoría</h3>
+      <div class="cupos" id="cupos"><p class="empty">Cargando cupos…</p></div>
+      <p class="hint">Las categorías de peso tienen 8 cupos y las libres 16. Una categoría se cierra cuando se sortea su llave.</p>
+    </section>
+  </div>
+</div></main>
+
+<script type="module">
+import {catById, weightCat, esc, clean} from '/motor.js';
+import {viewCupos} from '/vistas.js';
+
+const $ = id => document.getElementById(id);
+
+async function loadCupos(){
+  try {
+    const r = await fetch('/api/estado', {cache:'no-store'});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    $('cupos').innerHTML = viewCupos(clean(j.state));
+  } catch { $('cupos').innerHTML = '<p class="empty">No se pudieron cargar los cupos. Igual puedes enviar tu ficha.</p>'; }
+}
+
+$('f-career').addEventListener('change', e => {
+  const otra = e.target.value === 'otra';
+  $('f-other-wrap').hidden = !otra;
+  $('f-meca-only').hidden = !otra;
+  $('f-peso-label').hidden = otra;
+  $('f-cat-pd').disabled = otra;
+  $('f-cat-pd').checked = !otra;
+});
+
+$('f-weight').addEventListener('input', e => {
+  const w = parseFloat(e.target.value);
+  $('f-peso-label').textContent = w >= 30 ? `Tu categoría de peso: ${catById(weightCat(w) + 'd').label}` : 'Tu categoría de peso aparece aquí al escribir tu peso.';
+});
+
+function show(type, html){
+  const m = $('f-msg');
+  m.className = 'msg ' + type;
+  m.innerHTML = html;
+  m.hidden = false;
+  m.scrollIntoView({block:'nearest', behavior:'smooth'});
+}
+
+$('form-ins').addEventListener('submit', async e => {
+  e.preventDefault();
+  const datos = {
+    name:$('f-name').value, career:$('f-career').value, other:$('f-other').value,
+    year:$('f-year').value, section:$('f-section').value, weight:$('f-weight').value,
+    peso:$('f-cat-pd').checked && !$('f-cat-pd').disabled, ld:$('f-cat-ld').checked, li:$('f-cat-li').checked,
+  };
+  $('f-send').disabled = true;
+  $('f-send').textContent = 'Enviando…';
+  try {
+    const r = await fetch('/api/inscribir', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(datos)});
+    const j = await r.json();
+    if (!r.ok) show('err', esc(j.error || 'No se pudo enviar. Intenta de nuevo.'));
+    else {
+      show('ok', `Listo, <strong>${esc(j.name)}</strong>. Quedaste inscrito en: ${j.cats.map(esc).join(', ')}. Nos vemos en el campeonato.`);
+      $('form-ins').reset();
+      $('f-career').dispatchEvent(new Event('change'));
+      $('f-weight').dispatchEvent(new Event('input'));
+      loadCupos();
+    }
+  } catch { show('err', 'No hay conexión. Revisa tu internet e intenta de nuevo.'); }
+  $('f-send').disabled = false;
+  $('f-send').textContent = 'Inscribirme';
+});
+
+loadCupos();
+</script>
+</body>
+</html>

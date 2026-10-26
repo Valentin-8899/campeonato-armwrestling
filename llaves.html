@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Llaves en vivo · Campeonato de Lucha de Brazos</title>
+<meta name="description" content="Llaves y resultados en vivo del Campeonato de Lucha de Brazos 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Doble eliminación · Inacap</div>
+      <h1>Campeonato de <span>Lucha de Brazos</span> 2026</h1>
+      <p class="meta"><span id="meta"></span> <span class="stamp" id="stamp"></span></p>
+    </div>
+    <nav class="tabs">
+      <a href="/">Inscripción</a>
+      <a href="/llaves" aria-current="page">Llaves en vivo</a>
+      <a href="#podio" data-act="podio">Podio</a>
+    </nav>
+  </div>
+</header>
+<main><div class="wrap" id="app"><p class="empty">Cargando llaves…</p></div></main>
+
+<script type="module">
+import {CATS, clean, catStatus} from '/motor.js';
+import {catChips, viewVivo, viewCategoria, viewPodio} from '/vistas.js';
+
+let S = null, version = -1, lastOk = 0;
+const ui = {cat:location.hash === '#podio' ? 'podio' : 'vivo'};
+
+function render(){
+  if (!S) return;
+  const live = CATS.filter(c => catStatus(S, c.id) === 'live').length;
+  document.getElementById('meta').textContent = `${S.competitors.length} inscritos · ${live} llave${live === 1 ? '' : 's'} en curso ·`;
+  document.querySelector('nav a[href="/llaves"]').setAttribute('aria-current', ui.cat === 'podio' ? 'false' : 'page');
+  document.querySelector('nav a[data-act="podio"]').setAttribute('aria-current', ui.cat === 'podio' ? 'page' : 'false');
+  const app = document.getElementById('app');
+  const x = scrollX, y = scrollY;
+  const scrolls = [...app.querySelectorAll('.rounds')].map(el => el.scrollLeft);
+  app.innerHTML = ui.cat === 'podio' ? viewPodio(S) : catChips(S, ui.cat) + (ui.cat === 'vivo' ? viewVivo(S, false) : viewCategoria(S, ui.cat, false));
+  app.querySelectorAll('.rounds').forEach((el, i) => { el.scrollLeft = scrolls[i] || 0; });
+  scrollTo(x, y);
+}
+
+function stamp(){
+  const s = Math.round((Date.now() - lastOk) / 1000);
+  document.getElementById('stamp').textContent = !lastOk ? '' : s < 8 ? 'actualizado ahora' : `actualizado hace ${s} s`;
+}
+
+async function poll(){
+  try {
+    const r = await fetch('/api/estado', {cache:'no-store'});
+    const j = await r.json();
+    if (r.ok){
+      lastOk = Date.now();
+      if (j.version !== version){ version = j.version; S = clean(j.state); render(); }
+    }
+  } catch {}
+  stamp();
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]');
+  if (!t) return;
+  if (t.dataset.act === 'cat'){ ui.cat = t.dataset.cat; history.replaceState(null, '', location.pathname); render(); }
+  if (t.dataset.act === 'podio'){ e.preventDefault(); ui.cat = 'podio'; history.replaceState(null, '', '#podio'); render(); }
+});
+
+poll();
+setInterval(() => { if (!document.hidden) poll(); }, 5000);
+setInterval(stamp, 1000);
+</script>
+</body>
+</html>
