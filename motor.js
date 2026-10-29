@@ -68,6 +68,41 @@ export function validarInscripcion(st, d){
   return {competitor:{id:uid(), name, career, club, weight:Math.round(weight * 10) / 10, cats, weighed:false, at:Date.now()}};
 }
 
+// Qué pasa con la categoría de peso de un competidor al registrar su peso real en la balanza.
+// cur: categoría de peso actual (o undefined); to: la que corresponde al peso real.
+// Si cambia: locked (la llave actual ya se sorteó), toErr (sin cupo en la nueva) y ldErr (sin cupo en libre derecho).
+export function planPesaje(st, c, w){
+  const cur = c.cats.find(id => catById(id).group === 'peso');
+  if (!cur || !(w >= 30)) return {cur, to:cur, same:true};
+  const to = weightCat(w) + 'd';
+  if (to === cur) return {cur, to, same:true};
+  const others = {...st, competitors:st.competitors.filter(x => x.id !== c.id)};
+  return {
+    cur, to, same:false,
+    locked:st.brackets[cur] ? `La llave de ${catById(cur).label} ya se sorteó. Para moverlo, primero reinicia esa llave.` : null,
+    toErr:cupoError(others, to),
+    inLd:c.cats.includes('ld'),
+    ldErr:c.cats.includes('ld') ? null : cupoError(others, 'ld'),
+  };
+}
+
+// Registra el peso real. choice, cuando cambia la categoría: 'mover' (a la que corresponde), 'libre' (a libre derecho) o 'fuera' (sin categoría de peso;
+// si no le queda ninguna categoría, sale de la lista).
+export function aplicarPesaje(st, id, w, choice){
+  const c = st.competitors.find(x => x.id === id);
+  if (!c) return;
+  const plan = planPesaje(st, c, w);
+  if (c.declared === undefined) c.declared = c.weight;
+  c.weight = Math.round(w * 10) / 10;
+  c.weighed = true;
+  if (plan.same || plan.locked || !choice) return;
+  const cats = c.cats.filter(x => x !== plan.cur);
+  if (choice === 'mover') cats.push(plan.to);
+  if (choice === 'libre' && !cats.includes('ld')) cats.push('ld');
+  if (!cats.length){ st.competitors = st.competitors.filter(x => x.id !== id); return; }
+  c.cats = CATS.map(x => x.id).filter(x => cats.includes(x));
+}
+
 // Lo que ve cualquier persona: sin peso ni pesaje.
 export function publicState(st){
   return {competitors:st.competitors.map(c => ({id:c.id, name:c.name, club:c.club, cats:c.cats})), brackets:st.brackets};
