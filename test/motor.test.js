@@ -49,3 +49,40 @@ test('la ficha aplica la regla de Mecánica, los cupos y los duplicados', () => 
   for (let i = 0; i < 7; i++) st.competitors.push({id:'x' + i, name:'X' + i, cats:['m80d']});
   assert.match(validarInscripcion(st, {...base, name:'Otro Más', ld:false}).error, /8 cupos/);
 });
+
+test('pesaje: mueve a la categoría del peso real, o a la libre si no hay cupo', async () => {
+  const {planPesaje, aplicarPesaje} = await import('../motor.js');
+  const st = emptyState();
+  const add = (id, weight, cats, career = MECA) => st.competitors.push({id, name:id, career, club:'', weight, cats, weighed:false});
+  add('a', 64, ['m70d']);
+  add('b', 68, ['m70d', 'ld']);
+  add('c', 80, ['ld', 'li'], 'Construcción civil');
+  for (let i = 0; i < 8; i++) add('x' + i, 85, ['m90d']);
+
+  assert.deepEqual(planPesaje(st, st.competitors[0], 69.9).same, true);
+  aplicarPesaje(st, 'a', 76.4, 'mover');
+  const a = st.competitors.find(x => x.id === 'a');
+  assert.deepEqual([a.cats, a.weight, a.declared, a.weighed], [['m80d'], 76.4, 64, true]);
+
+  const pb = planPesaje(st, st.competitors.find(x => x.id === 'b'), 88);
+  assert.equal(pb.to, 'm90d');
+  assert.ok(pb.toErr && pb.inLd);
+  aplicarPesaje(st, 'b', 88, 'fuera');
+  assert.deepEqual(st.competitors.find(x => x.id === 'b').cats, ['ld']);
+
+  add('d', 70, ['m70d']);
+  aplicarPesaje(st, 'd', 89, 'libre');
+  assert.deepEqual(st.competitors.find(x => x.id === 'd').cats, ['ld']);
+
+  add('e', 70, ['m70d']);
+  aplicarPesaje(st, 'e', 89, 'fuera');
+  assert.equal(st.competitors.find(x => x.id === 'e'), undefined);
+
+  assert.equal(planPesaje(st, st.competitors.find(x => x.id === 'c'), 95).same, true);
+
+  add('f', 70, ['m70d']);
+  st.brackets.m70d = {locked:true};
+  assert.ok(planPesaje(st, st.competitors.find(x => x.id === 'f'), 79).locked);
+  aplicarPesaje(st, 'f', 79, null);
+  assert.deepEqual(st.competitors.find(x => x.id === 'f').cats, ['m70d']);
+});

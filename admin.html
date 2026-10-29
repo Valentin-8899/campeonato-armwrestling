@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Organizador · Campeonato de Lucha de Brazos</title>
+<title>Organizador · Campeonato de Lucha de Brazos Mecánica 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
 <link rel="stylesheet" href="/estilos.css">
@@ -14,7 +14,7 @@
   <div class="wrap">
     <div>
       <div class="eyebrow">Panel del organizador</div>
-      <h1>Campeonato de <span>Lucha de Brazos</span> 2026</h1>
+      <h1>Campeonato de <span>Lucha de Brazos</span> Mecánica 2026</h1>
       <p class="meta"><span id="meta"></span> <span class="stamp" id="sync"></span></p>
     </div>
     <nav class="tabs" id="tabs" hidden>
@@ -26,10 +26,11 @@
   </div>
 </header>
 <main><div class="wrap" id="app"></div></main>
+<dialog id="pesaje" class="dlg" aria-labelledby="pz-title"></dialog>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample} from '/motor.js';
+import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje} from '/motor.js';
 import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
 
 const $ = id => document.getElementById(id);
@@ -189,9 +190,9 @@ function viewCompetidores(){
   const rows = list.map(c => `<tr>
       <td><strong>${esc(c.name)}</strong></td>
       <td>${esc(c.club || '—')}</td>
-      <td class="kg">${c.weight ? c.weight.toFixed(1) + ' kg' : '—'}</td>
+      <td class="kg">${c.weight ? c.weight.toFixed(1) + ' kg' : '—'}${c.weighed && c.declared !== undefined && c.declared !== c.weight ? `<br><span class="hint">declaró ${c.declared ? c.declared.toFixed(1) : '—'}</span>` : ''}</td>
       <td>${c.cats.map(id => `<span class="chip ${catById(id).arm === 'd' ? 'ld' : 'li'}">${catById(id).short}</span>`).join('')}</td>
-      <td><label class="check"><input type="checkbox" data-act="weighed" data-id="${c.id}" ${c.weighed ? 'checked' : ''} aria-label="Pesaje de ${esc(c.name)}"></label></td>
+      <td>${c.weighed ? `<button class="btn small pesado" data-act="pesar" data-id="${c.id}" title="Corregir el peso de ${esc(c.name)}">✓ Pesado</button>` : `<button class="btn small" data-act="pesar" data-id="${c.id}">Pesar</button>`}</td>
       <td>${confirmBtn('del-' + c.id, 'Quitar', 'Sí, quitar', 'del', `data-id="${c.id}"`)}</td>
     </tr>`).join('');
   const imp = ui.importMsg; ui.importMsg = null;
@@ -200,7 +201,7 @@ function viewCompetidores(){
   return `${empty}<section class="panel">
     <div class="row" style="justify-content:space-between"><h2>Competidores</h2>
       <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div>
-    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. Marca el pesaje cuando cada uno pase por la balanza.</p>
+    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Nombre</th><th>Carrera y curso</th><th>Peso</th><th>Categorías</th><th>Pesaje</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="empty">Nadie inscrito todavía.</td></tr>'}</tbody>
@@ -238,12 +239,62 @@ function drawQR(){
   else box.innerHTML = '<span class="hint">No se pudo cargar el QR. Recarga la página.</span>';
 }
 
+/* ---------- pesaje ---------- */
+let pz = null;
+const pesoPz = () => parseFloat(($('pz-w')?.value || '').replace(',', '.'));
+function openPesaje(id){
+  const c = S.competitors.find(x => x.id === id);
+  if (!c) return;
+  pz = id;
+  const declared = c.declared ?? c.weight;
+  $('pesaje').innerHTML = `<form method="dialog" class="dlg-body" novalidate>
+    <h2 id="pz-title">Pesaje</h2>
+    <p><strong>${esc(c.name)}</strong><br><span class="muted">${esc(c.club || '')}</span></p>
+    <p class="muted">Peso declarado: <strong>${declared ? declared.toFixed(1) + ' kg' : '—'}</strong> · Categorías: ${c.cats.map(x => catById(x).label).join(', ')}</p>
+    <label class="f">Peso real en la balanza (kg)<input type="text" id="pz-w" inputmode="decimal" autocomplete="off" value="${c.weighed ? c.weight : ''}" placeholder="Ej: 78.4"></label>
+    <div id="pz-res"></div>
+  </form>`;
+  $('pesaje').showModal();
+  pesajeResult();
+  $('pz-w').focus();
+}
+function pesajeResult(){
+  const c = S.competitors.find(x => x.id === pz);
+  if (!c) return $('pesaje').close();
+  const w = pesoPz();
+  const btn = (label, choice, primary) => `<button type="button" class="btn ${primary ? 'primary' : ''}" data-act="pz-save" ${choice ? `data-choice="${choice}"` : ''}>${label}</button>`;
+  const cancel = '<button type="button" class="btn" data-act="pz-cancel">Cancelar</button>';
+  if (!(w >= 30 && w <= 250)){ $('pz-res').innerHTML = `<p class="hint">Escribe el peso que marcó la balanza.</p><div class="row">${cancel}</div>`; return; }
+  const p = planPesaje(S, c, w);
+  const lab = id => catById(id).label;
+  let html;
+  if (!p.cur) html = `<div class="msg ok">Compite solo en libres, así que el peso solo queda anotado.</div><div class="row">${btn('Guardar pesaje', null, true)}${cancel}</div>`;
+  else if (p.same) html = `<div class="msg ok">Se mantiene en <strong>${lab(p.cur)}</strong>.</div><div class="row">${btn('Guardar pesaje', null, true)}${cancel}</div>`;
+  else if (p.locked) html = `<div class="msg err">Con este peso le corresponde <strong>${lab(p.to)}</strong>. ${esc(p.locked)}</div><div class="row">${btn('Guardar solo el peso', null, true)}${cancel}</div>`;
+  else if (!p.toErr) html = `<div class="msg err">Con este peso le corresponde <strong>${lab(p.to)}</strong>, no ${lab(p.cur)}.</div><div class="row">${btn('Guardar y mover a ' + lab(p.to), 'mover', true)}${cancel}</div>`;
+  else {
+    const solo = c.cats.length === 1;
+    html = `<div class="msg err">Con este peso le corresponde <strong>${lab(p.to)}</strong>, pero ${esc(p.toErr.charAt(0).toLowerCase() + p.toErr.slice(1))} Sale de ${lab(p.cur)}.</div>
+      <p class="hint">Pregúntale si quiere competir en la categoría libre.</p>
+      <div class="row">${p.inLd ? btn('Seguir solo en Libre brazo derecho', 'fuera', true)
+        : p.ldErr ? `<span class="hint">${esc(p.ldErr)}</span>` : btn('Sí, pasar a Libre brazo derecho', 'libre', true)}
+      ${p.inLd ? '' : btn(solo ? 'No, quitarlo del campeonato' : 'No, sacarlo solo de ' + lab(p.cur), 'fuera', false)}${cancel}</div>`;
+  }
+  $('pz-res').innerHTML = html;
+}
+
 /* ---------- acciones ---------- */
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
   if (!t || !S) return;
   const a = t.dataset.act, d = t.dataset;
-  if (a === 'weighed') return;
+  if (a === 'pesar') return openPesaje(d.id);
+  if (a === 'pz-cancel') return $('pesaje').close();
+  if (a === 'pz-save'){
+    const id = pz, w = pesoPz(), choice = d.choice || null;
+    $('pesaje').close();
+    return mutate(st => aplicarPesaje(st, id, w, choice));
+  }
   if (a === 'nav'){ ui.view = d.view; ui.confirm = null; }
   else if (a === 'cat'){ ui.cat = d.cat; ui.confirm = null; }
   else if (a === 'ask'){ ui.confirm = d.key; }
@@ -281,10 +332,12 @@ document.addEventListener('change', e => {
   const t = e.target;
   if (!S) return;
   if (t.id === 'filter'){ ui.filter = t.value; render(); }
-  if (t.dataset.act === 'weighed'){ const id = t.dataset.id, val = t.checked; mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) c.weighed = val; }); }
 });
 
+document.addEventListener('input', e => { if (e.target.id === 'pz-w') pesajeResult(); });
+
 document.addEventListener('submit', e => {
+  if (e.target.closest('#pesaje')){ e.preventDefault(); $('pz-res').querySelector('.btn.primary')?.click(); return; }
   if (e.target.id !== 'login') return;
   e.preventDefault();
   login($('clave').value);
