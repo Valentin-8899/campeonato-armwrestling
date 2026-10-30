@@ -22,6 +22,7 @@ export function weightCat(w){
   return 'p100';
 }
 
+export const correoOk = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 export const uid = () => Math.random().toString(36).slice(2, 9);
 export const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 export const emptyState = () => ({competitors:[], brackets:{}});
@@ -54,7 +55,9 @@ export function validarInscripcion(st, d){
   const year = YEARS.includes(d.year) ? d.year : '';
   const section = txt(d.section, 20);
   const weight = parseFloat(String(d.weight ?? '').replace(',', '.'));
+  const email = txt(d.email, 120).toLowerCase();
   if (name.length < 3) return {error:'Escribe tu nombre completo.'};
+  if (!correoOk(email)) return {error:'Escribe un correo válido, por ejemplo nombre@inacapmail.cl.'};
   if (!career) return {error:'Escribe el nombre de tu carrera.'};
   if (!(weight >= 30 && weight <= 250)) return {error:'Escribe tu peso en kilos, por ejemplo 78.5.'};
   const cats = [];
@@ -65,7 +68,7 @@ export function validarInscripcion(st, d){
   if (st.competitors.some(c => c.name.toLowerCase() === name.toLowerCase())) return {error:`${name} ya está inscrito. Si hay un error, pide al organizador que lo corrija.`};
   for (const id of cats){ const e = cupoError(st, id); if (e) return {error:e}; }
   const club = `${career}${year ? ' · ' + year + ' año' : ''}${section ? ' · Sec. ' + section : ''}`;
-  return {competitor:{id:uid(), name, career, club, weight:Math.round(weight * 10) / 10, cats, weighed:false, at:Date.now()}};
+  return {competitor:{id:uid(), name, email, career, club, weight:Math.round(weight * 10) / 10, cats, weighed:false, at:Date.now()}};
 }
 
 // Qué pasa con la categoría de peso de un competidor al registrar su peso real en la balanza.

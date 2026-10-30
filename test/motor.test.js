@@ -38,14 +38,15 @@ test('solo la final de 1° y 2° va al mejor de 3', () => {
 
 test('la ficha aplica la regla de Mecánica, los cupos y los duplicados', () => {
   const st = emptyState();
-  const base = {name:'Ana Díaz', career:'meca', year:'2°', section:'201', weight:'78,5', peso:true, ld:true};
+  const base = {name:'Ana Díaz', email:'ana@inacapmail.cl', career:'meca', year:'2°', section:'201', weight:'78,5', peso:true, ld:true};
   const ok = validarInscripcion(st, base);
   assert.deepEqual(ok.competitor.cats, ['m80d', 'ld']);
   assert.equal(ok.competitor.club, `${MECA} · 2° año · Sec. 201`);
   st.competitors.push(ok.competitor);
   assert.match(validarInscripcion(st, base).error, /ya está inscrito/);
-  const otra = validarInscripcion(st, {name:'Luis Rojas', career:'otra', other:'Electricidad', weight:90, peso:true});
+  const otra = validarInscripcion(st, {name:'Luis Rojas', email:'luis@mail.cl', career:'otra', other:'Electricidad', weight:90, peso:true});
   assert.match(otra.error, /solo para Mecánica/);
+  assert.match(validarInscripcion(st, {...base, name:'Sin Correo', email:'sin-arroba'}).error, /correo válido/);
   for (let i = 0; i < 7; i++) st.competitors.push({id:'x' + i, name:'X' + i, cats:['m80d']});
   assert.match(validarInscripcion(st, {...base, name:'Otro Más', ld:false}).error, /8 cupos/);
 });

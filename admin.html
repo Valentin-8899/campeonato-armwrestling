@@ -30,7 +30,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje} from '/motor.js';
+import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk} from '/motor.js';
 import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
 
 const $ = id => document.getElementById(id);
@@ -131,7 +131,7 @@ function importRows(st, text){
   if (lines.length < 2) return {type:'err', text:'Pega también la fila de títulos y al menos una respuesta.'};
   const head = lines[0].split('\t').map(h => h.trim().toLowerCase());
   const cols = re => head.map((h, i) => re.test(h) ? i : -1).filter(i => i >= 0);
-  const ci = {name:cols(/nombre/), career:cols(/^¿?\s*carrera/), other:cols(/cu[aá]l/), year:cols(/año|ano\b/), section:cols(/secci[oó]n/), weight:cols(/peso/).filter(i => !/categor/.test(head[i])), cats:cols(/categor/)};
+  const ci = {name:cols(/nombre/), career:cols(/^¿?\s*carrera/), other:cols(/cu[aá]l/), year:cols(/año|ano\b/), section:cols(/secci[oó]n/), email:cols(/correo|e-?mail/), weight:cols(/peso/).filter(i => !/categor/.test(head[i])), cats:cols(/categor/)};
   if (!ci.name.length || !ci.cats.length) return {type:'err', text:'No encontré las columnas "Nombre completo" y "Categorías". Revisa que copiaste la fila de títulos.'};
   let added = 0;
   const notes = [];
@@ -154,8 +154,8 @@ function importRows(st, text){
     if (/libre[^,]*izquier/.test(sel)) cats.push('li');
     const ok = cats.filter(id => { const e = cupoError(st, id); if (e) notes.push(`${esc(name)}: ${esc(e)}`); return !e; });
     if (!ok.length){ notes.push(`${esc(name)}: no quedó en ninguna categoría.`); continue; }
-    const year = get(ci.year), section = get(ci.section);
-    st.competitors.push({id:uid(), name, career, club:`${career}${year ? ' · ' + year + ' año' : ''}${section ? ' · Sec. ' + section : ''}`, weight:weight >= 30 ? Math.round(weight * 10) / 10 : 0, cats:ok, weighed:false, at:Date.now()});
+    const year = get(ci.year), section = get(ci.section), email = get(ci.email).toLowerCase();
+    st.competitors.push({id:uid(), name, ...(correoOk(email) ? {email} : {}), career, club:`${career}${year ? ' · ' + year + ' año' : ''}${section ? ' · Sec. ' + section : ''}`, weight:weight >= 30 ? Math.round(weight * 10) / 10 : 0, cats:ok, weighed:false, at:Date.now()});
     added++;
   }
   return {type:notes.length ? 'err' : 'ok', text:`Se agregaron ${added} competidor${added === 1 ? '' : 'es'}.` + (notes.length ? '<br>Revisa: ' + notes.join('<br>') : '')};
@@ -188,7 +188,9 @@ function viewCompetidores(){
   const list = S.competitors.filter(c => ui.filter === 'todas' || c.cats.includes(ui.filter)).slice().sort((a, b) => a.weight - b.weight);
   const opts = ['<option value="todas">Todas las categorías</option>'].concat(CATS.map(c => `<option value="${c.id}" ${ui.filter === c.id ? 'selected' : ''}>${c.label} (${members(S, c.id).length})</option>`)).join('');
   const rows = list.map(c => `<tr>
-      <td><strong>${esc(c.name)}</strong></td>
+      <td><strong>${esc(c.name)}</strong><br>${c.email
+        ? `<button class="linkbtn" data-act="correo" data-id="${c.id}" title="Cambiar correo">${esc(c.email)}</button>`
+        : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</td>
       <td>${esc(c.club || '—')}</td>
       <td class="kg">${c.weight ? c.weight.toFixed(1) + ' kg' : '—'}${c.weighed && c.declared !== undefined && c.declared !== c.weight ? `<br><span class="hint">declaró ${c.declared ? c.declared.toFixed(1) : '—'}</span>` : ''}</td>
       <td>${c.cats.map(id => `<span class="chip ${catById(id).arm === 'd' ? 'ld' : 'li'}">${catById(id).short}</span>`).join('')}</td>
@@ -200,8 +202,9 @@ function viewCompetidores(){
     ? `<div class="banner"><span>Aún no hay inscritos. Comparte el link de la pestaña <strong>Compartir</strong>. Si quieres probar la app antes, carga datos inventados.</span><button class="btn small" data-act="example">Cargar datos de prueba</button></div>` : '';
   return `${empty}<section class="panel">
     <div class="row" style="justify-content:space-between"><h2>Competidores</h2>
-      <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div>
-    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
+      <div class="row">${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
+      <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div></div>
+    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Nombre</th><th>Carrera y curso</th><th>Peso</th><th>Categorías</th><th>Pesaje</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="empty">Nadie inscrito todavía.</td></tr>'}</tbody>
@@ -283,6 +286,23 @@ function pesajeResult(){
   $('pz-res').innerHTML = html;
 }
 
+/* ---------- correo ---------- */
+let mailId = null;
+function openCorreo(id){
+  const c = S.competitors.find(x => x.id === id);
+  if (!c) return;
+  mailId = id;
+  $('pesaje').innerHTML = `<form id="correo-form" class="dlg-body" novalidate>
+    <h2 id="pz-title">Correo</h2>
+    <p><strong>${esc(c.name)}</strong><br><span class="muted">${esc(c.club || '')}</span></p>
+    <label class="f">Correo electrónico<input type="email" id="mail-in" inputmode="email" autocomplete="off" value="${esc(c.email || '')}" placeholder="Ej: nombre@inacapmail.cl"></label>
+    <div id="mail-msg"></div>
+    <div class="row"><button class="btn primary" type="submit">Guardar</button><button type="button" class="btn" data-act="pz-cancel">Cancelar</button></div>
+  </form>`;
+  $('pesaje').showModal();
+  $('mail-in').focus();
+}
+
 /* ---------- acciones ---------- */
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
@@ -290,6 +310,12 @@ document.addEventListener('click', e => {
   const a = t.dataset.act, d = t.dataset;
   if (a === 'pesar') return openPesaje(d.id);
   if (a === 'pz-cancel') return $('pesaje').close();
+  if (a === 'correo') return openCorreo(d.id);
+  if (a === 'copy-mails'){
+    const mails = S.competitors.filter(c => c.email && (ui.filter === 'todas' || c.cats.includes(ui.filter))).map(c => c.email);
+    try { navigator.clipboard.writeText(mails.join(', ')).then(() => { t.textContent = 'Copiados'; }); } catch {}
+    return;
+  }
   if (a === 'pz-save'){
     const id = pz, w = pesoPz(), choice = d.choice || null;
     $('pesaje').close();
@@ -337,6 +363,13 @@ document.addEventListener('change', e => {
 document.addEventListener('input', e => { if (e.target.id === 'pz-w') pesajeResult(); });
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'correo-form'){
+    e.preventDefault();
+    const id = mailId, email = $('mail-in').value.trim().toLowerCase();
+    if (email && !correoOk(email)){ $('mail-msg').innerHTML = '<div class="msg err">Ese correo no parece válido. Revisa que tenga @ y un punto.</div>'; return; }
+    $('pesaje').close();
+    return mutate(st => { const c = st.competitors.find(x => x.id === id); if (c){ if (email) c.email = email; else delete c.email; } });
+  }
   if (e.target.closest('#pesaje')){ e.preventDefault(); $('pz-res').querySelector('.btn.primary')?.click(); return; }
   if (e.target.id !== 'login') return;
   e.preventDefault();

@@ -49,7 +49,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 /* formulario */
 form{display:flex;flex-direction:column;gap:14px}
 label.f{display:flex;flex-direction:column;gap:5px;font-weight:500;font-size:14px}
-input[type=text],input[type=number],select{font:16px var(--body);padding:10px 12px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%}
+input[type=text],input[type=number],input[type=email],select{font:16px var(--body);padding:10px 12px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:480px){.two{grid-template-columns:1fr}}
 fieldset{border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin:0;display:flex;flex-direction:column;gap:8px}
@@ -170,3 +170,6 @@ nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accen
 .dlg-body{padding:20px;display:flex;flex-direction:column;gap:12px}
 .dlg-body p{margin:0}
 .btn.pesado{color:var(--win);border-color:var(--win)}
+.linkbtn{background:none;border:0;padding:0;font:inherit;font-size:13px;color:var(--muted);cursor:pointer;text-align:left;word-break:break-all}
+.linkbtn:hover{text-decoration:underline;color:var(--ink)}
+.linkbtn.falta{color:var(--blue);font-weight:600}
