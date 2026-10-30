@@ -89,6 +89,8 @@ test('confirmación por correo con link personal para actualizar datos y foto', 
   const m = enviados.find(x => x.to === 'caro@mail.cl');
   const t = /mis-datos\?t=([\w-]+)/.exec(m.text)[1];
   assert.match(m.text, /-70 kg/);
+  assert.deepEqual(m.adjuntos, ['Bases Campeonato Lucha de Brazos 2026.pdf']);
+  assert.match(m.text, /reglamento\.pdf/);
 
   const pub = await call(estado, 'GET');
   assert.equal(JSON.stringify(pub).includes(t), false);
