@@ -30,6 +30,7 @@
       <div id="f-msg" class="msg" hidden></div>
       <form id="form-ins" novalidate>
         <label class="f">Nombre completo<input type="text" id="f-name" autocomplete="name" maxlength="80" placeholder="Ej: Martín Soto" required></label>
+        <label class="f">Correo electrónico<input type="email" id="f-email" autocomplete="email" inputmode="email" maxlength="120" placeholder="Ej: nombre@inacapmail.cl" required><span class="hint">Aquí te avisaremos el día del pesaje y otras novedades.</span></label>
         <div class="two">
           <label class="f">Carrera<select id="f-career"><option value="meca">Mecánica Automotriz</option><option value="otra">Otra carrera de Inacap</option></select></label>
           <label class="f" id="f-other-wrap" hidden>¿Cuál carrera?<input type="text" id="f-other" maxlength="80" placeholder="Ej: Electricidad Industrial"></label>
@@ -99,7 +100,7 @@ function show(type, html){
 $('form-ins').addEventListener('submit', async e => {
   e.preventDefault();
   const datos = {
-    name:$('f-name').value, career:$('f-career').value, other:$('f-other').value,
+    name:$('f-name').value, email:$('f-email').value, career:$('f-career').value, other:$('f-other').value,
     year:$('f-year').value, section:$('f-section').value, weight:$('f-weight').value,
     peso:$('f-cat-pd').checked && !$('f-cat-pd').disabled, ld:$('f-cat-ld').checked, li:$('f-cat-li').checked,
   };
