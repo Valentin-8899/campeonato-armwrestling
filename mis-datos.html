@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Mis datos · Campeonato de Lucha de Brazos Mecánica 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Doble eliminación · Inacap</div>
+      <h1>Campeonato de <span>Lucha de Brazos</span> Mecánica 2026</h1>
+      <p class="evento">24 de noviembre · 14:00 hrs · Salón Auditorium</p>
+    </div>
+    <nav class="tabs">
+      <a href="/">Inscripción</a>
+      <a href="/llaves">Llaves en vivo</a>
+    </nav>
+  </div>
+</header>
+<main><div class="wrap">
+  <section class="panel" aria-labelledby="h-datos" style="max-width:560px">
+    <h2 id="h-datos">Mis datos</h2>
+    <div id="f-msg" class="msg" hidden></div>
+    <div id="app"><p class="empty">Cargando tus datos…</p></div>
+  </section>
+</div></main>
+
+<script type="module">
+import {esc, YEARS, CIERRE_TEXTO} from '/motor.js';
+import {achicarFoto} from '/fotos.js';
+
+const $ = id => document.getElementById(id);
+const t = new URLSearchParams(location.search).get('t') || '';
+let yo = null, foto = null;
+
+function show(type, html){
+  const m = $('f-msg');
+  m.className = 'msg ' + type;
+  m.innerHTML = html;
+  m.hidden = !html;
+}
+
+const estadoFoto = {sin:'Aún no tienes foto.', revision:'Tu foto está en revisión: aparecerá en las llaves cuando el organizador la apruebe.', aprobada:'Tu foto ya aparece en las llaves.'};
+
+function render(){
+  if (!yo.abierto){
+    $('app').innerHTML = `<p><strong>${esc(yo.name)}</strong><br><span class="muted">${esc(yo.career)} · ${yo.cats.map(esc).join(', ')}</span></p>`;
+    return show('err', `Los cambios se cerraron el ${CIERRE_TEXTO}. Si necesitas corregir algo, habla con el organizador.`);
+  }
+  const img = foto ? `<img src="${foto}" alt="Tu foto nueva">` : yo.v ? `<img src="/api/foto?id=${encodeURIComponent(yo.id)}&v=${yo.v}" alt="Tu foto">` : '<span>📷</span>';
+  $('app').innerHTML = `<p><strong>${esc(yo.name)}</strong><br><span class="muted">${esc(yo.career)} · ${yo.cats.map(esc).join(', ')}</span></p>
+    <form id="form-datos" novalidate style="margin-top:12px">
+      <label class="f">Correo electrónico<input type="email" id="f-email" autocomplete="email" maxlength="120" value="${esc(yo.email)}"></label>
+      <div class="two">
+        <label class="f">Año de carrera<select id="f-year"><option value="">—</option>${YEARS.map(y => `<option ${y === yo.year ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
+        <label class="f">Sección<input type="text" id="f-section" maxlength="20" value="${esc(yo.section)}"></label>
+      </div>
+      <div class="f" style="display:flex;flex-direction:column;gap:6px;font-weight:500;font-size:14px">Foto
+        <div class="fotopick"><span class="face xl">${img}</span>
+          <label class="btn small">${yo.v || foto ? 'Cambiar foto' : 'Elegir o tomar foto'}<input type="file" id="f-foto" accept="image/*" hidden></label></div>
+        <span class="hint">${foto ? 'Foto nueva lista para guardar. Quedará en revisión hasta que el organizador la apruebe.' : estadoFoto[yo.foto]} Se ve en las llaves en vivo, que son públicas.</span>
+      </div>
+      <p class="hint">Puedes hacer cambios hasta el ${CIERRE_TEXTO}. Para cambiar tu nombre o tus categorías, habla con el organizador.</p>
+      <div class="row"><button class="btn primary" type="submit" id="f-send">Guardar cambios</button></div>
+    </form>`;
+}
+
+async function cargar(){
+  if (!t){ $('app').innerHTML = ''; return show('err', 'Abre esta página desde el link de tu correo de confirmación.'); }
+  try {
+    const r = await fetch('/api/mis-datos?t=' + encodeURIComponent(t), {cache:'no-store'});
+    const j = await r.json();
+    if (!r.ok){ $('app').innerHTML = ''; return show('err', esc(j.error)); }
+    yo = j; render();
+  } catch { $('app').innerHTML = ''; show('err', 'No hay conexión. Revisa tu internet y recarga la página.'); }
+}
+
+document.addEventListener('change', async e => {
+  if (e.target.id !== 'f-foto' || !e.target.files[0]) return;
+  // Se conservan los cambios que el alumno ya escribió antes de volver a dibujar el formulario.
+  Object.assign(yo, {email:$('f-email').value, year:$('f-year').value, section:$('f-section').value});
+  try { foto = await achicarFoto(e.target.files[0]); show('', ''); } catch { show('err', 'No se pudo leer esa foto. Prueba con otra.'); }
+  render();
+});
+
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'form-datos') return;
+  e.preventDefault();
+  $('f-send').disabled = true;
+  $('f-send').textContent = 'Guardando…';
+  try {
+    const r = await fetch('/api/mis-datos', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({t, email:$('f-email').value, year:$('f-year').value, section:$('f-section').value, foto})});
+    const j = await r.json();
+    if (!r.ok){ show('err', esc(j.error || 'No se pudo guardar.')); $('f-send').disabled = false; $('f-send').textContent = 'Guardar cambios'; return; }
+    yo = j; foto = null; render();
+    show('ok', 'Listo, guardamos tus cambios.');
+  } catch { show('err', 'No hay conexión. Intenta de nuevo.'); $('f-send').disabled = false; $('f-send').textContent = 'Guardar cambios'; }
+});
+
+cargar();
+</script>
+</body>
+</html>

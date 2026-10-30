@@ -190,7 +190,7 @@ function viewCompetidores(){
   const opts = ['<option value="todas">Todas las categorías</option>'].concat(CATS.map(c => `<option value="${c.id}" ${ui.filter === c.id ? 'selected' : ''}>${c.label} (${members(S, c.id).length})</option>`)).join('');
   const rows = list.map(c => `<tr>
       <td><div class="who"><button class="facebtn" data-act="foto" data-id="${c.id}" title="${c.foto ? 'Cambiar' : 'Agregar'} foto de ${esc(c.name)}">${cara(c, 'md' + (c.fotoRev ? ' rev' : ''))}</button><div><strong>${esc(c.name)}</strong><br>${c.email
-        ? `<button class="linkbtn" data-act="correo" data-id="${c.id}" title="Cambiar correo">${esc(c.email)}</button>`
+        ? `<button class="linkbtn" data-act="correo" data-id="${c.id}" title="${c.avisado ? 'Confirmación enviada. ' : ''}Cambiar correo">${c.avisado ? '✓ ' : ''}${esc(c.email)}</button>`
         : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</div></div></td>
       <td>${esc(c.club || '—')}</td>
       <td class="kg">${c.weight ? c.weight.toFixed(1) + ' kg' : '—'}${c.weighed && c.declared !== undefined && c.declared !== c.weight ? `<br><span class="hint">declaró ${c.declared ? c.declared.toFixed(1) : '—'}</span>` : ''}</td>
@@ -203,8 +203,9 @@ function viewCompetidores(){
     ? `<div class="banner"><span>Aún no hay inscritos. Comparte el link de la pestaña <strong>Compartir</strong>. Si quieres probar la app antes, carga datos inventados.</span><button class="btn small" data-act="example">Cargar datos de prueba</button></div>` : '';
   return `${empty}<section class="panel">
     <div class="row" style="justify-content:space-between"><h2>Competidores</h2>
-      <div class="row">${S.competitors.some(c => c.email) ? '<button class="btn small primary" data-act="enviar">Enviar correo</button>' : ''}${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
+      <div class="row">${porConfirmar().length ? `<button class="btn small" data-act="confirmar">Enviar confirmaciones (${porConfirmar().length})</button>` : ''}${S.competitors.some(c => c.email) ? '<button class="btn small primary" data-act="enviar">Enviar correo</button>' : ''}${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
       <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div></div>
+    ${ui.confMsg ? `<div class="msg ${ui.confMsg[0]}">${ui.confMsg[1]}</div>` : ''}
     <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}${S.competitors.some(c => c.fotoRev) ? `<strong class="revtxt">${S.competitors.filter(c => c.fotoRev).length} foto${S.competitors.filter(c => c.fotoRev).length === 1 ? '' : 's'} por revisar</strong> (toca la cara marcada en rojo). ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Nombre</th><th>Carrera y curso</th><th>Peso</th><th>Categorías</th><th>Pesaje</th><th></th></tr></thead>
@@ -337,6 +338,24 @@ async function subirFoto(file){
   openFoto(id, ['ok', 'Foto guardada.']);
 }
 
+/* ---------- confirmaciones automáticas ---------- */
+// Los inscritos con correo que aún no recibieron su confirmación con link personal (p. ej., los anteriores a esta función).
+const porConfirmar = () => S.competitors.filter(c => c.email && !c.avisado);
+const SIN_GMAIL = 'Falta conectar tu Gmail para enviar correos automáticos. En Vercel, agrega las variables <strong>GMAIL_USUARIO</strong> (tu correo de Gmail) y <strong>GMAIL_CLAVE_APP</strong> (la contraseña de aplicación de Google) y vuelve a desplegar.';
+async function enviarConfirmaciones(){
+  let total = 0;
+  for (;;){
+    ui.confMsg = ['ok', `Enviando confirmaciones… ${total} enviada${total === 1 ? '' : 's'}.`]; render();
+    let r, j = {};
+    try { r = await fetch('/api/confirmaciones', {method:'POST', headers:{'x-clave':clave}}); j = await r.json().catch(() => ({})); } catch { r = {ok:false}; j = {error:'No hay conexión.'}; }
+    if (!r.ok){ ui.confMsg = ['err', j.error === 'sin_configurar' ? SIN_GMAIL : esc(j.error || 'No se pudieron enviar.')]; break; }
+    total += j.enviados;
+    if (!j.faltan){ ui.confMsg = ['ok', `Listo: ${total} confirmación${total === 1 ? '' : 'es'} enviada${total === 1 ? '' : 's'}. Cada uno recibió su link personal para actualizar datos y foto.`]; break; }
+  }
+  await poll();
+  render();
+}
+
 /* ---------- enviar correo ---------- */
 // El panel no envía correos: arma el mensaje y lo abre en Gmail (o en el programa de correo del equipo)
 // con los participantes en copia oculta, para que nadie vea los correos de los demás.
@@ -454,6 +473,7 @@ document.addEventListener('click', e => {
     return;
   }
   if (a === 'enviar') return openEnviar();
+  if (a === 'confirmar'){ t.disabled = true; return enviarConfirmaciones(); }
   if (a === 'pdf') return descargarPDF();
   if (a === 'pdf-mail') return openEnviar({adjunto:true, asunto:'Resultados · Campeonato de Lucha de Brazos Mecánica 2026', msg:'Hola:\n\nTe enviamos los resultados oficiales del Campeonato de Lucha de Brazos Mecánica 2026 en el PDF adjunto.\n\n¡Gracias por participar!'});
   if (a === 'copy-mails'){
@@ -519,7 +539,7 @@ document.addEventListener('submit', e => {
     const id = mailId, email = $('mail-in').value.trim().toLowerCase();
     if (email && !correoOk(email)){ $('mail-msg').innerHTML = '<div class="msg err">Ese correo no parece válido. Revisa que tenga @ y un punto.</div>'; return; }
     $('pesaje').close();
-    return mutate(st => { const c = st.competitors.find(x => x.id === id); if (c){ if (email) c.email = email; else delete c.email; } });
+    return mutate(st => { const c = st.competitors.find(x => x.id === id); if (c){ if (email !== c.email) delete c.avisado; if (email) c.email = email; else delete c.email; } });
   }
   if (e.target.closest('#pesaje')){ e.preventDefault(); $('pz-res').querySelector('.btn.primary')?.click(); return; }
   if (e.target.id !== 'login') return;

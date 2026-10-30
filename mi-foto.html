@@ -38,11 +38,12 @@
 </div></main>
 
 <script type="module">
-import {esc} from '/motor.js';
+import {esc, abierto, MSG_CERRADO} from '/motor.js';
 import {achicarFoto} from '/fotos.js';
 
 const $ = id => document.getElementById(id);
 let foto = null;
+if (!abierto()){ $('form-foto').hidden = true; queueMicrotask(() => show('err', esc(MSG_CERRADO))); }
 
 function show(type, html){
   const m = $('f-msg');
