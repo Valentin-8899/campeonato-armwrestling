@@ -1,17 +1,21 @@
 // POST: un alumno envía su ficha. Se valida contra el estado actual (cupos, carrera, duplicados).
-import {read, write} from '../lib/store.js';
+import {read, write, writeFoto} from '../lib/store.js';
 import {readJson, send, fail} from '../lib/http.js';
-import {validarInscripcion, catById} from '../motor.js';
+import {validarInscripcion, catById, fotoB64} from '../motor.js';
 
 export default async function handler(req, res){
   if (req.method !== 'POST'){ res.setHeader('Allow', 'POST'); return send(res, 405, {error:'Método no permitido.'}); }
   try {
     const datos = await readJson(req);
+    const foto = datos.foto ? fotoB64(datos.foto) : null;
+    if (datos.foto && !foto) return send(res, 400, {error:'La foto no se pudo usar. Prueba con otra o inscríbete sin foto.'});
     // Si otra persona guarda al mismo tiempo, se vuelve a leer y validar.
     for (let i = 0; i < 6; i++){
       const {state, version} = await read();
       const v = validarInscripcion(state, datos);
       if (v.error) return send(res, 400, {error:v.error});
+      // La foto se guarda antes que la ficha: si la ficha no alcanza a guardarse, queda una foto sin uso.
+      if (foto){ await writeFoto(v.competitor.id, foto); v.competitor.foto = 1; }
       state.competitors.push(v.competitor);
       if (await write(version, state) !== null){
         const c = v.competitor;

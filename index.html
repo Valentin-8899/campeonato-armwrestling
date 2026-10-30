@@ -49,6 +49,12 @@
           <label class="check"><input type="checkbox" id="f-cat-li"> Libre brazo izquierdo</label>
           <span class="hint">Puedes marcar varias. La categoría de peso se confirma en el pesaje del día del campeonato.</span>
         </fieldset>
+        <div class="f" style="display:flex;flex-direction:column;gap:6px;font-weight:500;font-size:14px">Foto (opcional)
+          <div class="fotopick"><span class="face xl" id="f-face"><span>📷</span></span>
+            <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px"><label class="btn small">Elegir o tomar foto<input type="file" id="f-foto" accept="image/*" hidden></label>
+            <button type="button" class="btn small" id="f-foto-quitar" hidden>Quitar</button></div></div>
+          <span class="hint">Una foto de tu cara. Se verá junto a tu nombre en las llaves en vivo, que son públicas.</span>
+        </div>
         <div class="row"><button class="btn primary" type="submit" id="f-send">Inscribirme</button></div>
       </form>
     </section>
@@ -63,6 +69,7 @@
 <script type="module">
 import {catById, weightCat, esc, clean} from '/motor.js';
 import {viewCupos} from '/vistas.js';
+import {achicarFoto} from '/fotos.js';
 
 const $ = id => document.getElementById(id);
 
@@ -89,6 +96,20 @@ $('f-weight').addEventListener('input', e => {
   $('f-peso-label').textContent = w >= 30 ? `Tu categoría de peso: ${catById(weightCat(w) + 'd').label}` : 'Tu categoría de peso aparece aquí al escribir tu peso.';
 });
 
+let foto = null;
+function verFoto(){
+  $('f-face').innerHTML = foto ? `<img src="${foto}" alt="Tu foto">` : '<span>📷</span>';
+  $('f-foto-quitar').hidden = !foto;
+}
+$('f-foto').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try { foto = await achicarFoto(file); } catch { foto = null; show('err', 'No se pudo leer esa foto. Prueba con otra.'); }
+  verFoto();
+});
+$('f-foto-quitar').addEventListener('click', () => { foto = null; verFoto(); });
+
 function show(type, html){
   const m = $('f-msg');
   m.className = 'msg ' + type;
@@ -102,7 +123,7 @@ $('form-ins').addEventListener('submit', async e => {
   const datos = {
     name:$('f-name').value, email:$('f-email').value, career:$('f-career').value, other:$('f-other').value,
     year:$('f-year').value, section:$('f-section').value, weight:$('f-weight').value,
-    peso:$('f-cat-pd').checked && !$('f-cat-pd').disabled, ld:$('f-cat-ld').checked, li:$('f-cat-li').checked,
+    peso:$('f-cat-pd').checked && !$('f-cat-pd').disabled, ld:$('f-cat-ld').checked, li:$('f-cat-li').checked, foto,
   };
   $('f-send').disabled = true;
   $('f-send').textContent = 'Enviando…';
@@ -113,6 +134,7 @@ $('form-ins').addEventListener('submit', async e => {
     else {
       show('ok', `Listo, <strong>${esc(j.name)}</strong>. Quedaste inscrito en: ${j.cats.map(esc).join(', ')}. Nos vemos en el campeonato.`);
       $('form-ins').reset();
+      foto = null; verFoto();
       $('f-career').dispatchEvent(new Event('change'));
       $('f-weight').dispatchEvent(new Event('input'));
       loadCupos();

@@ -32,6 +32,7 @@
 <script type="module">
 import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk} from '/motor.js';
 import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
+import {achicarFoto, cara} from '/fotos.js';
 
 const $ = id => document.getElementById(id);
 let S = null, version = 0, clave = '';
@@ -188,9 +189,9 @@ function viewCompetidores(){
   const list = S.competitors.filter(c => ui.filter === 'todas' || c.cats.includes(ui.filter)).slice().sort((a, b) => a.weight - b.weight);
   const opts = ['<option value="todas">Todas las categorías</option>'].concat(CATS.map(c => `<option value="${c.id}" ${ui.filter === c.id ? 'selected' : ''}>${c.label} (${members(S, c.id).length})</option>`)).join('');
   const rows = list.map(c => `<tr>
-      <td><strong>${esc(c.name)}</strong><br>${c.email
+      <td><div class="who"><button class="facebtn" data-act="foto" data-id="${c.id}" title="${c.foto ? 'Cambiar' : 'Agregar'} foto de ${esc(c.name)}">${cara(c, 'md')}</button><div><strong>${esc(c.name)}</strong><br>${c.email
         ? `<button class="linkbtn" data-act="correo" data-id="${c.id}" title="Cambiar correo">${esc(c.email)}</button>`
-        : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</td>
+        : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</div></div></td>
       <td>${esc(c.club || '—')}</td>
       <td class="kg">${c.weight ? c.weight.toFixed(1) + ' kg' : '—'}${c.weighed && c.declared !== undefined && c.declared !== c.weight ? `<br><span class="hint">declaró ${c.declared ? c.declared.toFixed(1) : '—'}</span>` : ''}</td>
       <td>${c.cats.map(id => `<span class="chip ${catById(id).arm === 'd' ? 'ld' : 'li'}">${catById(id).short}</span>`).join('')}</td>
@@ -303,6 +304,37 @@ function openCorreo(id){
   $('mail-in').focus();
 }
 
+/* ---------- foto ---------- */
+let fotoId = null;
+function openFoto(id, msg){
+  const c = S.competitors.find(x => x.id === id);
+  if (!c) return;
+  fotoId = id;
+  $('pesaje').innerHTML = `<div class="dlg-body">
+    <h2 id="pz-title">Foto</h2>
+    <div class="fotopick">${cara(c, 'xl')}<div><strong>${esc(c.name)}</strong><br><span class="muted">${esc(c.club || '')}</span></div></div>
+    ${msg ? `<div class="msg ${msg[0]}">${msg[1]}</div>` : ''}
+    <div class="row"><label class="btn primary">${c.foto ? 'Cambiar foto' : 'Elegir o tomar foto'}<input type="file" id="foto-in" accept="image/*" hidden></label>
+      ${c.foto ? '<button type="button" class="btn danger" data-act="foto-quitar">Quitar foto</button>' : ''}
+      <button type="button" class="btn" data-act="pz-cancel">Cerrar</button></div>
+    <p class="hint">Se ve en las llaves en vivo, que son públicas. Desde el celular puedes tomarla con la cámara, por ejemplo en el pesaje.</p>
+  </div>`;
+  if (!$('pesaje').open) $('pesaje').showModal();
+}
+async function apiFoto(method, body, id){
+  const r = await fetch('/api/foto' + (id ? '?id=' + encodeURIComponent(id) : ''), {method, headers:{'Content-Type':'application/json', 'x-clave':clave}, body:body ? JSON.stringify(body) : undefined});
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo guardar la foto.');
+}
+async function subirFoto(file){
+  const id = fotoId;
+  try {
+    const foto = await achicarFoto(file);
+    await apiFoto('PUT', {id, foto});
+  } catch (e){ return openFoto(id, ['err', esc(e.message === 'foto' ? 'No se pudo leer esa foto. Prueba con otra.' : e.message)]); }
+  mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) c.foto = (c.foto || 0) + 1; });
+  openFoto(id, ['ok', 'Foto guardada.']);
+}
+
 /* ---------- enviar correo ---------- */
 // El panel no envía correos: arma el mensaje y lo abre en Gmail (o en el programa de correo del equipo)
 // con los participantes en copia oculta, para que nadie vea los correos de los demás.
@@ -404,6 +436,13 @@ document.addEventListener('click', e => {
   if (a === 'pesar') return openPesaje(d.id);
   if (a === 'pz-cancel') return $('pesaje').close();
   if (a === 'correo') return openCorreo(d.id);
+  if (a === 'foto') return openFoto(d.id);
+  if (a === 'foto-quitar'){
+    const id = fotoId;
+    apiFoto('DELETE', null, id).then(() => { mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) delete c.foto; }); openFoto(id); })
+      .catch(e => openFoto(id, ['err', esc(e.message)]));
+    return;
+  }
   if (a === 'enviar') return openEnviar();
   if (a === 'pdf') return descargarPDF();
   if (a === 'pdf-mail') return openEnviar({adjunto:true, asunto:'Resultados · Campeonato de Lucha de Brazos Mecánica 2026', msg:'Hola:\n\nTe enviamos los resultados oficiales del Campeonato de Lucha de Brazos Mecánica 2026 en el PDF adjunto.\n\n¡Gracias por participar!'});
@@ -452,6 +491,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.id === 'foto-in' && t.files[0]) return subirFoto(t.files[0]);
   if (!S) return;
   if (t.id === 'filter'){ ui.filter = t.value; render(); }
 });

@@ -1,8 +1,11 @@
 // Vistas de llaves y podio. Las usan el panel del organizador (editable) y la página pública (solo lectura).
 import {CATS, BYE, catById, members, compute, roundName, catStatus, statusText, esc} from './motor.js';
+import {cara} from './fotos.js';
 
 const bo3Text = m => `Mejor de 3 · ${m.score[0]}–${m.score[1]}`;
 const nameOf = (br, id) => br.entrants.find(e => e.id === id) || {name:'—', club:''};
+// Igual que nameOf, más la foto actual del competidor (la llave guarda solo nombre y curso).
+const conFoto = (S, br, id) => ({...nameOf(br, id), foto:S.competitors.find(c => c.id === id)?.foto});
 
 export function catChips(S, current){
   const chip = c => { const st = catStatus(S, c.id); return `<button data-act="cat" data-cat="${c.id}" aria-pressed="${current === c.id}" title="${c.label}: ${statusText[st]}"><span class="dot ${st}"></span>${c.weight}</button>`; };
@@ -24,8 +27,8 @@ export function viewVivo(S, editable){
   bouts.sort((a, b) => a.m.key - b.m.key || CATS.indexOf(a.c) - CATS.indexOf(b.c));
   const cards = bouts.map(({c, m, br, R, LR}) => {
     const p = i => {
-      const e = nameOf(br, m.s[i]);
-      const inner = `<strong>${esc(e.name)}</strong><span>${esc(e.club || '')}</span>`;
+      const e = conFoto(S, br, m.s[i]);
+      const inner = `${cara(e, 'lg')}<strong>${esc(e.name)}</strong><span>${esc(e.club || '')}</span>`;
       if (!editable) return `<div class="pick static">${inner}${m.bo3 ? `<em>${m.score[i]} pulso${m.score[i] === 1 ? '' : 's'}</em>` : ''}</div>`;
       return `<button class="pick" data-act="win" data-cat="${c.id}" data-m="${m.id}" data-p="${m.s[i]}">${inner}<em>${m.bo3 ? `Gana pulso · lleva ${m.score[i]}` : 'Marcar ganador'}</em></button>`;
     };
@@ -60,10 +63,10 @@ export function viewCategoria(S, catId, editable, confirmBtn){
     const slot = i => {
       const v = m.s[i];
       if (v == null) return `<div class="slot tbd"><span class="nm">Por definir</span></div>`;
-      const e = nameOf(br, v);
+      const e = conFoto(S, br, v);
       const can = editable && !m.done && m.s[0] && m.s[1] && m.s[0] !== BYE && m.s[1] !== BYE;
       const cls = (m.done ? (m.w === v ? 'win' : 'lose') : '') + (can ? ' can' : '');
-      const inner = `<span class="nm">${esc(e.name)}<span class="club">${esc(e.club || '')}</span></span>${m.bo3 && v !== BYE ? `<span class="sc">${m.score[i]}</span>` : ''}<span class="tag">GANA</span>`;
+      const inner = `${v === BYE ? '' : cara(e, 'sm')}<span class="nm">${esc(e.name)}<span class="club">${esc(e.club || '')}</span></span>${m.bo3 && v !== BYE ? `<span class="sc">${m.score[i]}</span>` : ''}<span class="tag">GANA</span>`;
       return can ? `<button class="slot ${cls}" data-act="win" data-cat="${catId}" data-m="${m.id}" data-p="${v}" title="${m.bo3 ? 'Sumar pulso ganado' : 'Marcar ganador'}">${inner}</button>` : `<div class="slot ${cls}">${inner}</div>`;
     };
     const ready = !m.done && m.s[0] && m.s[1];
@@ -81,7 +84,7 @@ export function viewCategoria(S, catId, editable, confirmBtn){
   for (let k = 1; k <= r.R; k++) W += column(roundName(byRound('W', k)[0], r.R, r.LR), byRound('W', k));
   for (let k = 1; k <= r.LR; k++) L += column(roundName(byRound('L', k)[0], r.R, r.LR), byRound('L', k));
   const F = column('Final 1° y 2°', [r.M.GF]) + column('Final decisiva', [r.M.GF2]);
-  const pod = r.podium ? `<section class="panel podio"><h3>Podio ${c.label}</h3>${podiumList(br, r.podium)}</section>` : '';
+  const pod = r.podium ? `<section class="panel podio"><h3>Podio ${c.label}</h3>${podiumList(S, br, r.podium)}</section>` : '';
   return `${pod}
     <div class="row" style="justify-content:space-between"><div><h2>${c.label}</h2><p class="muted">${br.entrants.length} competidores · ${r.played} de ${r.total} luchas jugadas</p></div>
     ${editable ? confirmBtn('reset-' + catId, 'Volver a sortear', 'Sí, borrar resultados y sortear', 'reset', `data-cat="${catId}"`) : ''}</div>
@@ -90,15 +93,15 @@ export function viewCategoria(S, catId, editable, confirmBtn){
     <section class="bsec"><h3>Final <small>al mejor de 3 pulsos; si gana quien viene del repechaje, se juega una final decisiva</small></h3><div class="rounds">${F}</div></section>`;
 }
 
-function podiumList(br, pod){
-  return `<ol>${pod.map((id, i) => id ? `<li><span class="pl">${i + 1}°</span><span>${esc(nameOf(br, id).name)}<small>${esc(nameOf(br, id).club || '')}</small></span></li>` : '').join('')}</ol>`;
+function podiumList(S, br, pod){
+  return `<ol>${pod.map((id, i) => { if (!id) return ''; const e = conFoto(S, br, id); return `<li><span class="pl">${i + 1}°</span><span class="who">${cara(e, 'md')}<span>${esc(e.name)}<small>${esc(e.club || '')}</small></span></span></li>`; }).join('')}</ol>`;
 }
 
 export function viewPodio(S){
   const cards = CATS.map(c => {
     const br = S.brackets[c.id];
     const r = br ? compute(br) : null;
-    const body = !br ? '<p class="empty">Llave sin sortear.</p>' : r.podium ? podiumList(br, r.podium) : `<p class="empty">En curso: ${r.played} de ${r.total} luchas.</p>`;
+    const body = !br ? '<p class="empty">Llave sin sortear.</p>' : r.podium ? podiumList(S, br, r.podium) : `<p class="empty">En curso: ${r.played} de ${r.total} luchas.</p>`;
     return `<section class="panel podio"><h3>${c.label}</h3>${body}</section>`;
   }).join('');
   return `<h2>Podio por categoría</h2><div class="podios">${cards}</div>`;
