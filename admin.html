@@ -202,7 +202,7 @@ function viewCompetidores(){
     ? `<div class="banner"><span>Aún no hay inscritos. Comparte el link de la pestaña <strong>Compartir</strong>. Si quieres probar la app antes, carga datos inventados.</span><button class="btn small" data-act="example">Cargar datos de prueba</button></div>` : '';
   return `${empty}<section class="panel">
     <div class="row" style="justify-content:space-between"><h2>Competidores</h2>
-      <div class="row">${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
+      <div class="row">${S.competitors.some(c => c.email) ? '<button class="btn small primary" data-act="enviar">Enviar correo</button>' : ''}${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
       <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div></div>
     <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
     <div class="tablewrap"><table>
@@ -303,6 +303,39 @@ function openCorreo(id){
   $('mail-in').focus();
 }
 
+/* ---------- enviar correo ---------- */
+// El panel no envía correos: arma el mensaje y lo abre en Gmail (o en el programa de correo del equipo)
+// con los participantes en copia oculta, para que nadie vea los correos de los demás.
+const GRUPOS = [
+  ['todos', 'Todos los inscritos', () => true],
+  ['sinpesaje', 'Los que aún no se pesan', c => !c.weighed],
+  ...CATS.map(k => [k.id, k.label, c => c.cats.includes(k.id)]),
+];
+function openEnviar(){
+  $('pesaje').innerHTML = `<form id="enviar-form" class="dlg-body" novalidate>
+    <h2 id="pz-title">Enviar correo</h2>
+    <label class="f">Para<select id="ev-grupo">${GRUPOS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label>
+    <p class="hint" id="ev-cuenta"></p>
+    <label class="f">Asunto<input type="text" id="ev-asunto" value="Campeonato de Lucha de Brazos Mecánica 2026"></label>
+    <label class="f">Mensaje<textarea id="ev-msg" rows="6" placeholder="Ej: El pesaje será el lunes 23 de noviembre a las 13:00 en el Salón Auditorium. Trae tu credencial."></textarea></label>
+    <div class="row"><a class="btn primary" id="ev-gmail" target="_blank" rel="noopener">Abrir en Gmail</a><a class="btn" id="ev-mailto">Otro programa de correo</a><button type="button" class="btn" data-act="pz-cancel">Cerrar</button></div>
+    <p class="hint">Se abre un correo nuevo ya armado, con los participantes en copia oculta (no ven los correos de los demás). Revísalo y aprieta Enviar ahí.</p>
+  </form>`;
+  $('pesaje').showModal();
+  enviarLinks();
+}
+function enviarLinks(){
+  const [, , fn] = GRUPOS.find(g => g[0] === $('ev-grupo').value);
+  const grupo = S.competitors.filter(fn);
+  const mails = [...new Set(grupo.filter(c => c.email).map(c => c.email))];
+  const sin = grupo.filter(c => !c.email);
+  $('ev-cuenta').innerHTML = `${mails.length} destinatario${mails.length === 1 ? '' : 's'}.` + (sin.length ? ` Sin correo (no les llegará): ${sin.map(c => esc(c.name)).join(', ')}.` : '');
+  const su = $('ev-asunto').value, body = $('ev-msg').value, bcc = mails.join(',');
+  $('ev-gmail').href = 'https://mail.google.com/mail/?view=cm&fs=1&bcc=' + encodeURIComponent(bcc) + '&su=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(body);
+  $('ev-mailto').href = 'mailto:?bcc=' + encodeURIComponent(bcc) + '&subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(body);
+  for (const id of ['ev-gmail', 'ev-mailto']) $(id).classList.toggle('off', !mails.length);
+}
+
 /* ---------- acciones ---------- */
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
@@ -311,6 +344,7 @@ document.addEventListener('click', e => {
   if (a === 'pesar') return openPesaje(d.id);
   if (a === 'pz-cancel') return $('pesaje').close();
   if (a === 'correo') return openCorreo(d.id);
+  if (a === 'enviar') return openEnviar();
   if (a === 'copy-mails'){
     const mails = S.competitors.filter(c => c.email && (ui.filter === 'todas' || c.cats.includes(ui.filter))).map(c => c.email);
     try { navigator.clipboard.writeText(mails.join(', ')).then(() => { t.textContent = 'Copiados'; }); } catch {}
@@ -360,9 +394,13 @@ document.addEventListener('change', e => {
   if (t.id === 'filter'){ ui.filter = t.value; render(); }
 });
 
-document.addEventListener('input', e => { if (e.target.id === 'pz-w') pesajeResult(); });
+document.addEventListener('input', e => {
+  if (e.target.id === 'pz-w') pesajeResult();
+  if (e.target.closest('#enviar-form')) enviarLinks();
+});
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'enviar-form'){ e.preventDefault(); return; }
   if (e.target.id === 'correo-form'){
     e.preventDefault();
     const id = mailId, email = $('mail-in').value.trim().toLowerCase();
