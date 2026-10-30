@@ -1,7 +1,7 @@
 {
   "cleanUrls": true,
   "functions": {
-    "api/inscribir.js": {"maxDuration": 30},
-    "api/confirmaciones.js": {"maxDuration": 60}
+    "api/inscribir.js": {"maxDuration": 30, "includeFiles": "reglamento.pdf"},
+    "api/confirmaciones.js": {"maxDuration": 60, "includeFiles": "reglamento.pdf"}
   }
 }
