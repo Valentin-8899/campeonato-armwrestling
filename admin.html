@@ -175,7 +175,7 @@ function render(){
   const banner = S.example ? `<div class="banner"><span><strong>Datos de prueba.</strong> Los competidores y resultados son inventados. Bórralos antes de abrir las inscripciones.</span>${confirmBtn('clear', 'Borrar todo y empezar de cero', 'Sí, borrar todo', 'clear-all')}</div>` : '';
   const app = $('app');
   const scrolls = [...app.querySelectorAll('.rounds')].map(el => el.scrollLeft);
-  app.innerHTML = banner + ({competidores:viewCompetidores, llaves:viewLlaves, podio:() => viewPodio(S), compartir:viewCompartir}[ui.view])();
+  app.innerHTML = banner + ({competidores:viewCompetidores, llaves:viewLlaves, podio:() => viewPodioAdmin(), compartir:viewCompartir}[ui.view])();
   app.querySelectorAll('.rounds').forEach((el, i) => { el.scrollLeft = scrolls[i] || 0; });
   if (ui.view === 'compartir') drawQR();
 }
@@ -311,13 +311,14 @@ const GRUPOS = [
   ['sinpesaje', 'Los que aún no se pesan', c => !c.weighed],
   ...CATS.map(k => [k.id, k.label, c => c.cats.includes(k.id)]),
 ];
-function openEnviar(){
+function openEnviar(pre = {}){
   $('pesaje').innerHTML = `<form id="enviar-form" class="dlg-body" novalidate>
     <h2 id="pz-title">Enviar correo</h2>
     <label class="f">Para<select id="ev-grupo">${GRUPOS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label>
+    ${pre.adjunto ? `<div class="msg ok"><strong>Adjunta el PDF:</strong> Gmail no lo agrega solo. En el correo que se abre, toca el clip 📎 (Adjuntar) y elige <strong>${PDF_NOMBRE}</strong> de tu carpeta Descargas.</div>` : ''}
     <p class="hint" id="ev-cuenta"></p>
-    <label class="f">Asunto<input type="text" id="ev-asunto" value="Campeonato de Lucha de Brazos Mecánica 2026"></label>
-    <label class="f">Mensaje<textarea id="ev-msg" rows="6" placeholder="Ej: El pesaje será el lunes 23 de noviembre a las 13:00 en el Salón Auditorium. Trae tu credencial."></textarea></label>
+    <label class="f">Asunto<input type="text" id="ev-asunto" value="${esc(pre.asunto || 'Campeonato de Lucha de Brazos Mecánica 2026')}"></label>
+    <label class="f">Mensaje<textarea id="ev-msg" rows="6" placeholder="Ej: El pesaje será el lunes 23 de noviembre a las 13:00 en el Salón Auditorium. Trae tu credencial.">${esc(pre.msg || '')}</textarea></label>
     <div class="row"><a class="btn primary" id="ev-gmail" target="_blank" rel="noopener">Abrir en Gmail</a><a class="btn" id="ev-mailto">Otro programa de correo</a><button type="button" class="btn" data-act="pz-cancel">Cerrar</button></div>
     <p class="hint">Se abre un correo nuevo ya armado, con los participantes en copia oculta (no ven los correos de los demás). Revísalo y aprieta Enviar ahí.</p>
   </form>`;
@@ -329,11 +330,70 @@ function enviarLinks(){
   const grupo = S.competitors.filter(fn);
   const mails = [...new Set(grupo.filter(c => c.email).map(c => c.email))];
   const sin = grupo.filter(c => !c.email);
-  $('ev-cuenta').innerHTML = `${mails.length} destinatario${mails.length === 1 ? '' : 's'}.` + (sin.length ? ` Sin correo (no les llegará): ${sin.map(c => esc(c.name)).join(', ')}.` : '');
+  $('ev-cuenta').innerHTML = `${mails.length} destinatario${mails.length === 1 ? '' : 's'}.` + (sin.length ? ` ${sin.length} sin correo (no les llegará)${sin.length <= 8 ? ': ' + sin.map(c => esc(c.name)).join(', ') : ''}.` : '');
   const su = $('ev-asunto').value, body = $('ev-msg').value, bcc = mails.join(',');
   $('ev-gmail').href = 'https://mail.google.com/mail/?view=cm&fs=1&bcc=' + encodeURIComponent(bcc) + '&su=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(body);
   $('ev-mailto').href = 'mailto:?bcc=' + encodeURIComponent(bcc) + '&subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(body);
   for (const id of ['ev-gmail', 'ev-mailto']) $(id).classList.toggle('off', !mails.length);
+}
+
+/* ---------- resultados en PDF ---------- */
+const PDF_NOMBRE = 'resultados-campeonato-2026.pdf';
+function viewPodioAdmin(){
+  return `<section class="panel"><div class="row" style="justify-content:space-between"><div><h3>Resultados en PDF</h3>
+    <p class="hint">Descarga el podio de las 7 categorías en un PDF y envíalo a los participantes.</p></div>
+    <div class="row"><button class="btn primary" data-act="pdf">Descargar PDF</button><button class="btn" data-act="pdf-mail">Enviar resultados por correo</button></div></div>
+    <div id="pdf-msg"></div></section>` + viewPodio(S);
+}
+function cargarJsPDF(){
+  if (window.jspdf) return Promise.resolve();
+  return new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = ok; s.onerror = fail;
+    document.head.append(s);
+  });
+}
+async function descargarPDF(){
+  try { await cargarJsPDF(); } catch { $('pdf-msg').innerHTML = '<div class="msg err">No se pudo preparar el PDF. Revisa tu conexión e intenta de nuevo.</div>'; return; }
+  const doc = new window.jspdf.jsPDF({unit:'mm', format:'a4'});
+  const W = 210, X = 18;
+  let y = 22;
+  const salto = h => { if (y + h > 280){ doc.addPage(); y = 20; } };
+  doc.setFillColor(196, 43, 28); doc.rect(0, 0, W, 6, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(21, 24, 29);
+  doc.text('CAMPEONATO DE LUCHA DE BRAZOS', W / 2, y, {align:'center'}); y += 9;
+  doc.setTextColor(196, 43, 28); doc.text('MECÁNICA 2026', W / 2, y, {align:'center'}); y += 8;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(90, 98, 113);
+  doc.text('24 de noviembre · 14:00 hrs · Salón Auditorium · Resultados oficiales', W / 2, y, {align:'center'}); y += 12;
+  for (const c of CATS){
+    const br = S.brackets[c.id], r = br ? compute(br) : null;
+    const lista = r && r.podium ? r.podium.filter(Boolean) : [];
+    salto(12 + Math.max(1, lista.length) * 7);
+    doc.setDrawColor(211, 216, 224); doc.line(X, y - 5, W - X, y - 5);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(21, 24, 29);
+    doc.text(c.label, X, y); y += 7;
+    doc.setFontSize(11);
+    if (!lista.length){
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 98, 113);
+      doc.text(!br ? 'Llave sin sortear.' : `En curso: ${r.played} de ${r.total} luchas.`, X + 4, y); y += 9;
+      continue;
+    }
+    lista.forEach((id, i) => {
+      const e = br.entrants.find(p => p.id === id) || {name:'—', club:''};
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(i === 0 ? 196 : 21, i === 0 ? 43 : 24, i === 0 ? 28 : 29);
+      doc.text(`${i + 1}°`, X + 4, y);
+      doc.text(doc.splitTextToSize(e.name, 70)[0], X + 16, y);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 98, 113);
+      doc.text(doc.splitTextToSize(e.club || '', 90)[0].replace(/\s*·\s*$/, ''), X + 88, y);
+      y += 7;
+    });
+    y += 4;
+  }
+  doc.setFontSize(9); doc.setTextColor(90, 98, 113);
+  doc.text('Generado el ' + new Date().toLocaleString('es-CL', {dateStyle:'long', timeStyle:'short'}), X, 290);
+  doc.save(PDF_NOMBRE);
+  $('pdf-msg').innerHTML = `<div class="msg ok">Listo: se descargó <strong>${PDF_NOMBRE}</strong> (queda en tu carpeta Descargas).</div>`;
 }
 
 /* ---------- acciones ---------- */
@@ -345,6 +405,8 @@ document.addEventListener('click', e => {
   if (a === 'pz-cancel') return $('pesaje').close();
   if (a === 'correo') return openCorreo(d.id);
   if (a === 'enviar') return openEnviar();
+  if (a === 'pdf') return descargarPDF();
+  if (a === 'pdf-mail') return openEnviar({adjunto:true, asunto:'Resultados · Campeonato de Lucha de Brazos Mecánica 2026', msg:'Hola:\n\nTe enviamos los resultados oficiales del Campeonato de Lucha de Brazos Mecánica 2026 en el PDF adjunto.\n\n¡Gracias por participar!'});
   if (a === 'copy-mails'){
     const mails = S.competitors.filter(c => c.email && (ui.filter === 'todas' || c.cats.includes(ui.filter))).map(c => c.email);
     try { navigator.clipboard.writeText(mails.join(', ')).then(() => { t.textContent = 'Copiados'; }); } catch {}
