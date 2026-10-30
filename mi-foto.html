@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Sube tu foto · Campeonato de Lucha de Brazos Mecánica 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Doble eliminación · Inacap</div>
+      <h1>Campeonato de <span>Lucha de Brazos</span> Mecánica 2026</h1>
+      <p class="evento">24 de noviembre · 14:00 hrs · Salón Auditorium</p>
+    </div>
+    <nav class="tabs">
+      <a href="/">Inscripción</a>
+      <a href="/llaves">Llaves en vivo</a>
+    </nav>
+  </div>
+</header>
+<main><div class="wrap">
+  <section class="panel" aria-labelledby="h-foto" style="max-width:520px">
+    <div><h2 id="h-foto">Sube tu foto</h2><p class="muted">Para que se vea tu cara en las llaves el día del campeonato. Es opcional.</p></div>
+    <div id="f-msg" class="msg" hidden></div>
+    <form id="form-foto" novalidate>
+      <label class="f">Correo con que te inscribiste<input type="email" id="f-email" autocomplete="email" inputmode="email" maxlength="120" placeholder="Ej: nombre@inacapmail.cl" required></label>
+      <div class="fotopick"><span class="face xl" id="f-face"><span>📷</span></span>
+        <label class="btn small">Elegir o tomar foto<input type="file" id="f-foto" accept="image/*" hidden></label></div>
+      <span class="hint">Una foto de tu cara, de frente. Se verá en las llaves en vivo, que son públicas, después de que el organizador la revise.</span>
+      <div class="row"><button class="btn primary" type="submit" id="f-send">Subir foto</button></div>
+    </form>
+  </section>
+</div></main>
+
+<script type="module">
+import {esc} from '/motor.js';
+import {achicarFoto} from '/fotos.js';
+
+const $ = id => document.getElementById(id);
+let foto = null;
+
+function show(type, html){
+  const m = $('f-msg');
+  m.className = 'msg ' + type;
+  m.innerHTML = html;
+  m.hidden = false;
+}
+
+$('f-foto').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try { foto = await achicarFoto(file); } catch { foto = null; show('err', 'No se pudo leer esa foto. Prueba con otra.'); }
+  $('f-face').innerHTML = foto ? `<img src="${foto}" alt="Tu foto">` : '<span>📷</span>';
+});
+
+$('form-foto').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!$('f-email').value.trim()) return show('err', 'Escribe el correo con que te inscribiste.');
+  if (!foto) return show('err', 'Elige o toma una foto primero.');
+  $('f-send').disabled = true;
+  $('f-send').textContent = 'Subiendo…';
+  try {
+    const r = await fetch('/api/foto', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:$('f-email').value, foto})});
+    const j = await r.json();
+    if (!r.ok) show('err', esc(j.error || 'No se pudo subir. Intenta de nuevo.'));
+    else {
+      show('ok', `Listo, <strong>${esc(j.name)}</strong>. Recibimos tu foto; aparecerá en las llaves cuando el organizador la revise.`);
+      $('form-foto').hidden = true;
+    }
+  } catch { show('err', 'No hay conexión. Revisa tu internet e intenta de nuevo.'); }
+  $('f-send').disabled = false;
+  $('f-send').textContent = 'Subir foto';
+});
+</script>
+</body>
+</html>

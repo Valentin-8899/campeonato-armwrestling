@@ -32,6 +32,7 @@
 <script type="module">
 import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk} from '/motor.js';
 import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
+import {achicarFoto, cara} from '/fotos.js';
 
 const $ = id => document.getElementById(id);
 let S = null, version = 0, clave = '';
@@ -175,7 +176,7 @@ function render(){
   const banner = S.example ? `<div class="banner"><span><strong>Datos de prueba.</strong> Los competidores y resultados son inventados. Bórralos antes de abrir las inscripciones.</span>${confirmBtn('clear', 'Borrar todo y empezar de cero', 'Sí, borrar todo', 'clear-all')}</div>` : '';
   const app = $('app');
   const scrolls = [...app.querySelectorAll('.rounds')].map(el => el.scrollLeft);
-  app.innerHTML = banner + ({competidores:viewCompetidores, llaves:viewLlaves, podio:() => viewPodio(S), compartir:viewCompartir}[ui.view])();
+  app.innerHTML = banner + ({competidores:viewCompetidores, llaves:viewLlaves, podio:() => viewPodioAdmin(), compartir:viewCompartir}[ui.view])();
   app.querySelectorAll('.rounds').forEach((el, i) => { el.scrollLeft = scrolls[i] || 0; });
   if (ui.view === 'compartir') drawQR();
 }
@@ -188,9 +189,9 @@ function viewCompetidores(){
   const list = S.competitors.filter(c => ui.filter === 'todas' || c.cats.includes(ui.filter)).slice().sort((a, b) => a.weight - b.weight);
   const opts = ['<option value="todas">Todas las categorías</option>'].concat(CATS.map(c => `<option value="${c.id}" ${ui.filter === c.id ? 'selected' : ''}>${c.label} (${members(S, c.id).length})</option>`)).join('');
   const rows = list.map(c => `<tr>
-      <td><strong>${esc(c.name)}</strong><br>${c.email
+      <td><div class="who"><button class="facebtn" data-act="foto" data-id="${c.id}" title="${c.foto ? 'Cambiar' : 'Agregar'} foto de ${esc(c.name)}">${cara(c, 'md' + (c.fotoRev ? ' rev' : ''))}</button><div><strong>${esc(c.name)}</strong><br>${c.email
         ? `<button class="linkbtn" data-act="correo" data-id="${c.id}" title="Cambiar correo">${esc(c.email)}</button>`
-        : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</td>
+        : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</div></div></td>
       <td>${esc(c.club || '—')}</td>
       <td class="kg">${c.weight ? c.weight.toFixed(1) + ' kg' : '—'}${c.weighed && c.declared !== undefined && c.declared !== c.weight ? `<br><span class="hint">declaró ${c.declared ? c.declared.toFixed(1) : '—'}</span>` : ''}</td>
       <td>${c.cats.map(id => `<span class="chip ${catById(id).arm === 'd' ? 'ld' : 'li'}">${catById(id).short}</span>`).join('')}</td>
@@ -202,9 +203,9 @@ function viewCompetidores(){
     ? `<div class="banner"><span>Aún no hay inscritos. Comparte el link de la pestaña <strong>Compartir</strong>. Si quieres probar la app antes, carga datos inventados.</span><button class="btn small" data-act="example">Cargar datos de prueba</button></div>` : '';
   return `${empty}<section class="panel">
     <div class="row" style="justify-content:space-between"><h2>Competidores</h2>
-      <div class="row">${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
+      <div class="row">${S.competitors.some(c => c.email) ? '<button class="btn small primary" data-act="enviar">Enviar correo</button>' : ''}${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
       <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div></div>
-    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
+    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}${S.competitors.some(c => c.fotoRev) ? `<strong class="revtxt">${S.competitors.filter(c => c.fotoRev).length} foto${S.competitors.filter(c => c.fotoRev).length === 1 ? '' : 's'} por revisar</strong> (toca la cara marcada en rojo). ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Nombre</th><th>Carrera y curso</th><th>Peso</th><th>Categorías</th><th>Pesaje</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="empty">Nadie inscrito todavía.</td></tr>'}</tbody>
@@ -303,6 +304,139 @@ function openCorreo(id){
   $('mail-in').focus();
 }
 
+/* ---------- foto ---------- */
+let fotoId = null;
+function openFoto(id, msg){
+  const c = S.competitors.find(x => x.id === id);
+  if (!c) return;
+  fotoId = id;
+  $('pesaje').innerHTML = `<div class="dlg-body">
+    <h2 id="pz-title">Foto</h2>
+    <div class="fotopick">${cara(c, 'xl')}<div><strong>${esc(c.name)}</strong><br><span class="muted">${esc(c.club || '')}</span></div></div>
+    ${msg ? `<div class="msg ${msg[0]}">${msg[1]}</div>` : ''}
+    ${c.fotoRev ? `<div class="msg err">La subió el alumno desde el link del correo y <strong>aún no se muestra</strong> en las páginas públicas. Si es su cara, apruébala.</div>
+      <div class="row"><button type="button" class="btn primary" data-act="foto-ok">Aprobar foto</button></div>` : ''}
+    <div class="row"><label class="btn ${c.fotoRev ? '' : 'primary'}">${c.foto ? 'Cambiar foto' : 'Elegir o tomar foto'}<input type="file" id="foto-in" accept="image/*" hidden></label>
+      ${c.foto ? '<button type="button" class="btn danger" data-act="foto-quitar">Quitar foto</button>' : ''}
+      <button type="button" class="btn" data-act="pz-cancel">Cerrar</button></div>
+    <p class="hint">Se ve en las llaves en vivo, que son públicas. Desde el celular puedes tomarla con la cámara, por ejemplo en el pesaje.</p>
+  </div>`;
+  if (!$('pesaje').open) $('pesaje').showModal();
+}
+async function apiFoto(method, body, id){
+  const r = await fetch('/api/foto' + (id ? '?id=' + encodeURIComponent(id) : ''), {method, headers:{'Content-Type':'application/json', 'x-clave':clave}, body:body ? JSON.stringify(body) : undefined});
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'No se pudo guardar la foto.');
+}
+async function subirFoto(file){
+  const id = fotoId;
+  try {
+    const foto = await achicarFoto(file);
+    await apiFoto('PUT', {id, foto});
+  } catch (e){ return openFoto(id, ['err', esc(e.message === 'foto' ? 'No se pudo leer esa foto. Prueba con otra.' : e.message)]); }
+  mutate(st => { const c = st.competitors.find(x => x.id === id); if (c){ c.foto = (c.foto || 0) + 1; delete c.fotoRev; } });
+  openFoto(id, ['ok', 'Foto guardada.']);
+}
+
+/* ---------- enviar correo ---------- */
+// El panel no envía correos: arma el mensaje y lo abre en Gmail (o en el programa de correo del equipo)
+// con los participantes en copia oculta, para que nadie vea los correos de los demás.
+const GRUPOS = [
+  ['todos', 'Todos los inscritos', () => true],
+  ['sinpesaje', 'Los que aún no se pesan', c => !c.weighed],
+  ['sinfoto', 'Los que no tienen foto', c => !c.foto],
+  ...CATS.map(k => [k.id, k.label, c => c.cats.includes(k.id)]),
+];
+function openEnviar(pre = {}){
+  $('pesaje').innerHTML = `<form id="enviar-form" class="dlg-body" novalidate>
+    <h2 id="pz-title">Enviar correo</h2>
+    <label class="f">Para<select id="ev-grupo">${GRUPOS.map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</select></label>
+    ${pre.adjunto ? `<div class="msg ok"><strong>Adjunta el PDF:</strong> Gmail no lo agrega solo. En el correo que se abre, toca el clip 📎 (Adjuntar) y elige <strong>${PDF_NOMBRE}</strong> de tu carpeta Descargas.</div>` : ''}
+    <p class="hint" id="ev-cuenta"></p>
+    <label class="f">Asunto<input type="text" id="ev-asunto" value="${esc(pre.asunto || 'Campeonato de Lucha de Brazos Mecánica 2026')}"></label>
+    <label class="f">Mensaje<textarea id="ev-msg" rows="6" placeholder="Ej: El pesaje será el lunes 23 de noviembre a las 13:00 en el Salón Auditorium. Trae tu credencial.">${esc(pre.msg || '')}</textarea></label>
+    <div class="row"><a class="btn primary" id="ev-gmail" target="_blank" rel="noopener">Abrir en Gmail</a><a class="btn" id="ev-mailto">Otro programa de correo</a><button type="button" class="btn" data-act="pz-cancel">Cerrar</button></div>
+    <p class="hint">Se abre un correo nuevo ya armado, con los participantes en copia oculta (no ven los correos de los demás). Revísalo y aprieta Enviar ahí.</p>
+  </form>`;
+  $('pesaje').showModal();
+  enviarLinks();
+}
+// Al elegir "Los que no tienen foto" con el mensaje vacío, se escribe el aviso con el link para subirla.
+function avisoFoto(){
+  if ($('ev-grupo').value !== 'sinfoto' || $('ev-msg').value.trim()) return;
+  $('ev-asunto').value = 'Sube tu foto · Campeonato de Lucha de Brazos Mecánica 2026';
+  $('ev-msg').value = `Hola:\n\nEn las llaves del campeonato se mostrará la cara de cada participante y aún no tenemos tu foto. Súbela aquí, es opcional y toma un minuto:\n\n${location.origin}/mi-foto\n\nUsa el mismo correo con que te inscribiste. Una foto de tu cara, de frente.\n\n¡Nos vemos el 24 de noviembre!`;
+}
+function enviarLinks(){
+  const [, , fn] = GRUPOS.find(g => g[0] === $('ev-grupo').value);
+  const grupo = S.competitors.filter(fn);
+  const mails = [...new Set(grupo.filter(c => c.email).map(c => c.email))];
+  const sin = grupo.filter(c => !c.email);
+  $('ev-cuenta').innerHTML = `${mails.length} destinatario${mails.length === 1 ? '' : 's'}.` + (sin.length ? ` ${sin.length} sin correo (no les llegará)${sin.length <= 8 ? ': ' + sin.map(c => esc(c.name)).join(', ') : ''}.` : '');
+  const su = $('ev-asunto').value, body = $('ev-msg').value, bcc = mails.join(',');
+  $('ev-gmail').href = 'https://mail.google.com/mail/?view=cm&fs=1&bcc=' + encodeURIComponent(bcc) + '&su=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(body);
+  $('ev-mailto').href = 'mailto:?bcc=' + encodeURIComponent(bcc) + '&subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(body);
+  for (const id of ['ev-gmail', 'ev-mailto']) $(id).classList.toggle('off', !mails.length);
+}
+
+/* ---------- resultados en PDF ---------- */
+const PDF_NOMBRE = 'resultados-campeonato-2026.pdf';
+function viewPodioAdmin(){
+  return `<section class="panel"><div class="row" style="justify-content:space-between"><div><h3>Resultados en PDF</h3>
+    <p class="hint">Descarga el podio de las 7 categorías en un PDF y envíalo a los participantes.</p></div>
+    <div class="row"><button class="btn primary" data-act="pdf">Descargar PDF</button><button class="btn" data-act="pdf-mail">Enviar resultados por correo</button></div></div>
+    <div id="pdf-msg"></div></section>` + viewPodio(S);
+}
+function cargarJsPDF(){
+  if (window.jspdf) return Promise.resolve();
+  return new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = ok; s.onerror = fail;
+    document.head.append(s);
+  });
+}
+async function descargarPDF(){
+  try { await cargarJsPDF(); } catch { $('pdf-msg').innerHTML = '<div class="msg err">No se pudo preparar el PDF. Revisa tu conexión e intenta de nuevo.</div>'; return; }
+  const doc = new window.jspdf.jsPDF({unit:'mm', format:'a4'});
+  const W = 210, X = 18;
+  let y = 22;
+  const salto = h => { if (y + h > 280){ doc.addPage(); y = 20; } };
+  doc.setFillColor(196, 43, 28); doc.rect(0, 0, W, 6, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(21, 24, 29);
+  doc.text('CAMPEONATO DE LUCHA DE BRAZOS', W / 2, y, {align:'center'}); y += 9;
+  doc.setTextColor(196, 43, 28); doc.text('MECÁNICA 2026', W / 2, y, {align:'center'}); y += 8;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(90, 98, 113);
+  doc.text('24 de noviembre · 14:00 hrs · Salón Auditorium · Resultados oficiales', W / 2, y, {align:'center'}); y += 12;
+  for (const c of CATS){
+    const br = S.brackets[c.id], r = br ? compute(br) : null;
+    const lista = r && r.podium ? r.podium.filter(Boolean) : [];
+    salto(12 + Math.max(1, lista.length) * 7);
+    doc.setDrawColor(211, 216, 224); doc.line(X, y - 5, W - X, y - 5);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(21, 24, 29);
+    doc.text(c.label, X, y); y += 7;
+    doc.setFontSize(11);
+    if (!lista.length){
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 98, 113);
+      doc.text(!br ? 'Llave sin sortear.' : `En curso: ${r.played} de ${r.total} luchas.`, X + 4, y); y += 9;
+      continue;
+    }
+    lista.forEach((id, i) => {
+      const e = br.entrants.find(p => p.id === id) || {name:'—', club:''};
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(i === 0 ? 196 : 21, i === 0 ? 43 : 24, i === 0 ? 28 : 29);
+      doc.text(`${i + 1}°`, X + 4, y);
+      doc.text(doc.splitTextToSize(e.name, 70)[0], X + 16, y);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(90, 98, 113);
+      doc.text(doc.splitTextToSize(e.club || '', 90)[0].replace(/\s*·\s*$/, ''), X + 88, y);
+      y += 7;
+    });
+    y += 4;
+  }
+  doc.setFontSize(9); doc.setTextColor(90, 98, 113);
+  doc.text('Generado el ' + new Date().toLocaleString('es-CL', {dateStyle:'long', timeStyle:'short'}), X, 290);
+  doc.save(PDF_NOMBRE);
+  $('pdf-msg').innerHTML = `<div class="msg ok">Listo: se descargó <strong>${PDF_NOMBRE}</strong> (queda en tu carpeta Descargas).</div>`;
+}
+
 /* ---------- acciones ---------- */
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
@@ -311,6 +445,17 @@ document.addEventListener('click', e => {
   if (a === 'pesar') return openPesaje(d.id);
   if (a === 'pz-cancel') return $('pesaje').close();
   if (a === 'correo') return openCorreo(d.id);
+  if (a === 'foto') return openFoto(d.id);
+  if (a === 'foto-ok'){ const id = fotoId; mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) delete c.fotoRev; }); return openFoto(id, ['ok', 'Foto aprobada: ya se ve en las llaves.']); }
+  if (a === 'foto-quitar'){
+    const id = fotoId;
+    apiFoto('DELETE', null, id).then(() => { mutate(st => { const c = st.competitors.find(x => x.id === id); if (c){ delete c.foto; delete c.fotoRev; } }); openFoto(id); })
+      .catch(e => openFoto(id, ['err', esc(e.message)]));
+    return;
+  }
+  if (a === 'enviar') return openEnviar();
+  if (a === 'pdf') return descargarPDF();
+  if (a === 'pdf-mail') return openEnviar({adjunto:true, asunto:'Resultados · Campeonato de Lucha de Brazos Mecánica 2026', msg:'Hola:\n\nTe enviamos los resultados oficiales del Campeonato de Lucha de Brazos Mecánica 2026 en el PDF adjunto.\n\n¡Gracias por participar!'});
   if (a === 'copy-mails'){
     const mails = S.competitors.filter(c => c.email && (ui.filter === 'todas' || c.cats.includes(ui.filter))).map(c => c.email);
     try { navigator.clipboard.writeText(mails.join(', ')).then(() => { t.textContent = 'Copiados'; }); } catch {}
@@ -356,13 +501,19 @@ document.addEventListener('click', e => {
 
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.id === 'foto-in' && t.files[0]) return subirFoto(t.files[0]);
   if (!S) return;
   if (t.id === 'filter'){ ui.filter = t.value; render(); }
 });
 
-document.addEventListener('input', e => { if (e.target.id === 'pz-w') pesajeResult(); });
+document.addEventListener('input', e => {
+  if (e.target.id === 'pz-w') pesajeResult();
+  if (e.target.id === 'ev-grupo') avisoFoto();
+  if (e.target.closest('#enviar-form')) enviarLinks();
+});
 
 document.addEventListener('submit', e => {
+  if (e.target.id === 'enviar-form'){ e.preventDefault(); return; }
   if (e.target.id === 'correo-form'){
     e.preventDefault();
     const id = mailId, email = $('mail-in').value.trim().toLowerCase();

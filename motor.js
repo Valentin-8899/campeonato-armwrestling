@@ -106,9 +106,15 @@ export function aplicarPesaje(st, id, w, choice){
   c.cats = CATS.map(x => x.id).filter(x => cats.includes(x));
 }
 
-// Lo que ve cualquier persona: sin peso ni pesaje.
+// Foto enviada como data URL JPEG; devuelve el base64 o null si no sirve. El navegador la achica antes a 240×240.
+export function fotoB64(dataUrl){
+  const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  return m && m[1].length <= 200000 ? m[1] : null;
+}
+
+// Lo que ve cualquier persona: sin peso, pesaje ni correo.
 export function publicState(st){
-  return {competitors:st.competitors.map(c => ({id:c.id, name:c.name, club:c.club, cats:c.cats})), brackets:st.brackets};
+  return {competitors:st.competitors.map(c => ({id:c.id, name:c.name, club:c.club, cats:c.cats, ...(c.foto && !c.fotoRev ? {foto:c.foto} : {})})), brackets:st.brackets};
 }
 
 /* ---------- motor de doble eliminación ---------- */
