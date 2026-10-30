@@ -26,7 +26,7 @@
 <main><div class="wrap">
   <div class="grid2">
     <section class="panel" aria-labelledby="h-ins">
-      <div><h2 id="h-ins">Ficha de inscripción</h2><p class="muted">Completa tus datos y elige tus categorías.</p></div>
+      <div><h2 id="h-ins">Ficha de inscripción</h2><p class="muted">Completa tus datos y elige tus categorías. <strong id="f-cierre"></strong></p></div>
       <div id="f-msg" class="msg" hidden></div>
       <form id="form-ins" novalidate>
         <label class="f">Nombre completo<input type="text" id="f-name" autocomplete="name" maxlength="80" placeholder="Ej: Martín Soto" required></label>
@@ -67,7 +67,7 @@
 </div></main>
 
 <script type="module">
-import {catById, weightCat, esc, clean} from '/motor.js';
+import {catById, weightCat, esc, clean, abierto, CIERRE_TEXTO} from '/motor.js';
 import {viewCupos} from '/vistas.js';
 import {achicarFoto} from '/fotos.js';
 
@@ -132,7 +132,7 @@ $('form-ins').addEventListener('submit', async e => {
     const j = await r.json();
     if (!r.ok) show('err', esc(j.error || 'No se pudo enviar. Intenta de nuevo.'));
     else {
-      show('ok', `Listo, <strong>${esc(j.name)}</strong>. Quedaste inscrito en: ${j.cats.map(esc).join(', ')}. Nos vemos en el campeonato.`);
+      show('ok', `Listo, <strong>${esc(j.name)}</strong>. Quedaste inscrito en: ${j.cats.map(esc).join(', ')}.${j.avisado ? ' Te enviamos un correo de confirmación con un link para actualizar tus datos y tu foto (si no lo ves, revisa Spam).' : ''} Nos vemos en el campeonato.`);
       $('form-ins').reset();
       foto = null; verFoto();
       $('f-career').dispatchEvent(new Event('change'));
@@ -144,6 +144,11 @@ $('form-ins').addEventListener('submit', async e => {
   $('f-send').textContent = 'Inscribirme';
 });
 
+if (abierto()) $('f-cierre').textContent = `Inscripciones abiertas hasta el ${CIERRE_TEXTO}.`;
+else {
+  $('form-ins').hidden = true;
+  show('err', `Las inscripciones se cerraron el ${CIERRE_TEXTO}. Si necesitas algo, habla con el organizador.`);
+}
 loadCupos();
 </script>
 </body>

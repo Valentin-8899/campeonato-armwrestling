@@ -46,6 +46,18 @@ export function cupoError(st, catId){
   return null;
 }
 
+// Las inscripciones y los cambios que hacen los alumnos (ficha, foto, link personal) se cierran al terminar
+// el día anterior al campeonato: lunes 23 de noviembre de 2026, 23:59 hora de Chile (UTC−3 en verano).
+// Después, solo el organizador agrega, quita o edita desde el panel.
+export const CIERRE = Date.parse('2026-11-24T00:00:00-03:00');
+export const CIERRE_TEXTO = 'lunes 23 de noviembre a las 23:59';
+export const abierto = (ahora = Date.now()) => ahora < CIERRE;
+export const MSG_CERRADO = `Las inscripciones y los cambios se cerraron el ${CIERRE_TEXTO}. Si necesitas algo, habla con el organizador.`;
+
+export const clubDe = (career, year, section) => `${career}${year ? ' · ' + year + ' año' : ''}${section ? ' · Sec. ' + section : ''}`;
+// Año y sección de un competidor (los inscritos antes de guardarlos aparte los tienen solo dentro de club).
+export const cursoDe = c => ({year:c.year ?? (/· (\d°) año/.exec(c.club || '') || [])[1] ?? '', section:c.section ?? (/Sec\. (.+)$/.exec(c.club || '') || [])[1] ?? ''});
+
 // Valida una ficha de inscripción. Devuelve {error} o {competitor} listo para agregar.
 export function validarInscripcion(st, d){
   const txt = (v, max) => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
@@ -67,8 +79,7 @@ export function validarInscripcion(st, d){
   if (!cats.length) return {error:isMeca ? 'Elige al menos una categoría.' : `Elige al menos una categoría libre. Las de peso son solo para ${MECA}.`};
   if (st.competitors.some(c => c.name.toLowerCase() === name.toLowerCase())) return {error:`${name} ya está inscrito. Si hay un error, pide al organizador que lo corrija.`};
   for (const id of cats){ const e = cupoError(st, id); if (e) return {error:e}; }
-  const club = `${career}${year ? ' · ' + year + ' año' : ''}${section ? ' · Sec. ' + section : ''}`;
-  return {competitor:{id:uid(), name, email, career, club, weight:Math.round(weight * 10) / 10, cats, weighed:false, at:Date.now()}};
+  return {competitor:{id:uid(), name, email, career, club:clubDe(career, year, section), year, section, weight:Math.round(weight * 10) / 10, cats, weighed:false, at:Date.now()}};
 }
 
 // Qué pasa con la categoría de peso de un competidor al registrar su peso real en la balanza.

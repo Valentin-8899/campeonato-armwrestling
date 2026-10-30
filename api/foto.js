@@ -4,7 +4,7 @@
 // PUT {id, foto} o DELETE ?id=…: el organizador agrega, cambia o quita una foto.
 import {read, write, readFoto, writeFoto} from '../lib/store.js';
 import {readJson, send, fail, isAdmin} from '../lib/http.js';
-import {fotoB64} from '../motor.js';
+import {fotoB64, abierto, MSG_CERRADO} from '../motor.js';
 
 export default async function handler(req, res){
   try {
@@ -37,6 +37,7 @@ export default async function handler(req, res){
 
 // Solo para quien aún no tiene foto: así nadie puede reemplazar la de otro. Para cambiarla, el organizador.
 async function subirPropia(req, res){
+  if (!abierto()) return send(res, 403, {error:MSG_CERRADO});
   const {email, foto} = await readJson(req);
   const mail = String(email || '').trim().toLowerCase();
   const b64 = fotoB64(foto);

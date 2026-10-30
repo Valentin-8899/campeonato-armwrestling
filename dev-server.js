@@ -6,10 +6,12 @@ import {extname, join, normalize} from 'node:path';
 import estado from './api/estado.js';
 import inscribir from './api/inscribir.js';
 import foto from './api/foto.js';
+import misDatos from './api/mis-datos.js';
+import confirmaciones from './api/confirmaciones.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const types = {'.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png'};
-const api = {'/api/estado':estado, '/api/inscribir':inscribir, '/api/foto':foto};
+const api = {'/api/estado':estado, '/api/inscribir':inscribir, '/api/foto':foto, '/api/mis-datos':misDatos, '/api/confirmaciones':confirmaciones};
 
 createServer(async (req, res) => {
   const path = new URL(req.url, 'http://x').pathname;

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {Readable} from 'node:stream';
 import estado from '../api/estado.js';
 import inscribir from '../api/inscribir.js';
+import {MECA} from '../motor.js';
 
 // Llama a una función de /api como lo haría Vercel, sin servidor.
 async function call(handler, method, body, headers = {}){
@@ -77,4 +78,48 @@ test('la foto de la ficha se guarda aparte y se sirve como imagen', async () => 
 
   const mala = await call(inscribir, 'POST', {name:'Otro Foto', email:'o@mail.cl', career:'otra', other:'X', weight:70, li:true, foto:'data:image/png;base64,AAAA'});
   assert.equal(mala.status, 400);
+});
+
+test('confirmación por correo con link personal para actualizar datos y foto', async () => {
+  const {enviados} = await import('../lib/correo.js');
+  const {default: misDatos} = await import('../api/mis-datos.js');
+  const {default: confirmaciones} = await import('../api/confirmaciones.js');
+  const r = await call(inscribir, 'POST', {name:'Caro Link', email:'caro@mail.cl', career:'meca', year:'3°', section:'301', weight:60, peso:true}, {host:'localhost:3000'});
+  assert.equal(r.avisado, true);
+  const m = enviados.find(x => x.to === 'caro@mail.cl');
+  const t = /mis-datos\?t=([\w-]+)/.exec(m.text)[1];
+  assert.match(m.text, /-70 kg/);
+
+  const pub = await call(estado, 'GET');
+  assert.equal(JSON.stringify(pub).includes(t), false);
+
+  const ver = async (method, url, body) => {
+    const req = Readable.from(body ? [JSON.stringify(body)] : []);
+    Object.assign(req, {method, url, headers:{}});
+    const res = {statusCode:200, headers:{}, setHeader(){}, end(b){ this.body = JSON.parse(b); }};
+    await misDatos(req, res);
+    return {status:res.statusCode, ...res.body};
+  };
+  assert.equal((await ver('GET', '/api/mis-datos?t=malo')).status, 404);
+  const yo = await ver('GET', '/api/mis-datos?t=' + t);
+  assert.deepEqual([yo.name, yo.year, yo.section, yo.foto], ['Caro Link', '3°', '301', 'sin']);
+  const jpeg = 'data:image/jpeg;base64,' + Buffer.from('x').toString('base64');
+  const g = await ver('POST', '/api/mis-datos', {t, email:'Caro.Nueva@mail.cl', year:'4°', section:'401', foto:jpeg});
+  assert.deepEqual([g.status, g.email, g.year, g.foto], [200, 'caro.nueva@mail.cl', '4°', 'revision']);
+  const full = await call(estado, 'GET', null, {'x-clave':'prueba'});
+  const caro = full.state.competitors.find(c => c.name === 'Caro Link');
+  assert.equal(caro.club, `${MECA} · 4° año · Sec. 401`);
+  assert.ok(caro.avisado && caro.fotoRev);
+
+  // Los inscritos antes de esta función (sin link) reciben su confirmación desde el panel.
+  full.state.competitors.push({id:'viejo1', name:'Viejo Uno', email:'viejo@mail.cl', career:MECA, club:MECA, weight:70, cats:['m70d'], weighed:false});
+  assert.equal((await call(estado, 'PUT', {version:full.version, state:full.state}, {'x-clave':'prueba'})).status, 200);
+  const viejos = full.state.competitors.filter(c => c.email && !c.avisado).length;
+  assert.ok(viejos > 0);
+  assert.equal((await call(confirmaciones, 'POST', null, {})).status, 401);
+  const env = await call(confirmaciones, 'POST', null, {'x-clave':'prueba', host:'localhost:3000'});
+  assert.equal(env.enviados + env.faltan, viejos);
+  const viejo = (await call(estado, 'GET', null, {'x-clave':'prueba'})).state.competitors.find(c => c.id === 'viejo1');
+  assert.ok(viejo.token && viejo.avisado);
+  assert.ok(enviados.some(x => x.to === 'viejo@mail.cl' && x.text.includes(viejo.token)));
 });

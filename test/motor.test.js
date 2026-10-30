@@ -87,3 +87,10 @@ test('pesaje: mueve a la categoría del peso real, o a la libre si no hay cupo',
   aplicarPesaje(st, 'f', 79, null);
   assert.deepEqual(st.competitors.find(x => x.id === 'f').cats, ['m70d']);
 });
+
+test('las inscripciones y cambios de alumnos cierran al terminar el 23 de noviembre (hora de Chile)', async () => {
+  const {abierto} = await import('../motor.js');
+  assert.equal(abierto(Date.parse('2026-11-23T23:59:00-03:00')), true);
+  assert.equal(abierto(Date.parse('2026-11-24T00:00:00-03:00')), false);
+  assert.equal(abierto(Date.parse('2026-11-24T14:00:00-03:00')), false);
+});
