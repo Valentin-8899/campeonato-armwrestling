@@ -189,7 +189,7 @@ function viewCompetidores(){
   const list = S.competitors.filter(c => ui.filter === 'todas' || c.cats.includes(ui.filter)).slice().sort((a, b) => a.weight - b.weight);
   const opts = ['<option value="todas">Todas las categorías</option>'].concat(CATS.map(c => `<option value="${c.id}" ${ui.filter === c.id ? 'selected' : ''}>${c.label} (${members(S, c.id).length})</option>`)).join('');
   const rows = list.map(c => `<tr>
-      <td><div class="who"><button class="facebtn" data-act="foto" data-id="${c.id}" title="${c.foto ? 'Cambiar' : 'Agregar'} foto de ${esc(c.name)}">${cara(c, 'md')}</button><div><strong>${esc(c.name)}</strong><br>${c.email
+      <td><div class="who"><button class="facebtn" data-act="foto" data-id="${c.id}" title="${c.foto ? 'Cambiar' : 'Agregar'} foto de ${esc(c.name)}">${cara(c, 'md' + (c.fotoRev ? ' rev' : ''))}</button><div><strong>${esc(c.name)}</strong><br>${c.email
         ? `<button class="linkbtn" data-act="correo" data-id="${c.id}" title="Cambiar correo">${esc(c.email)}</button>`
         : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</div></div></td>
       <td>${esc(c.club || '—')}</td>
@@ -205,7 +205,7 @@ function viewCompetidores(){
     <div class="row" style="justify-content:space-between"><h2>Competidores</h2>
       <div class="row">${S.competitors.some(c => c.email) ? '<button class="btn small primary" data-act="enviar">Enviar correo</button>' : ''}${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
       <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div></div>
-    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
+    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}${S.competitors.some(c => c.fotoRev) ? `<strong class="revtxt">${S.competitors.filter(c => c.fotoRev).length} foto${S.competitors.filter(c => c.fotoRev).length === 1 ? '' : 's'} por revisar</strong> (toca la cara marcada en rojo). ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Nombre</th><th>Carrera y curso</th><th>Peso</th><th>Categorías</th><th>Pesaje</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="empty">Nadie inscrito todavía.</td></tr>'}</tbody>
@@ -314,7 +314,9 @@ function openFoto(id, msg){
     <h2 id="pz-title">Foto</h2>
     <div class="fotopick">${cara(c, 'xl')}<div><strong>${esc(c.name)}</strong><br><span class="muted">${esc(c.club || '')}</span></div></div>
     ${msg ? `<div class="msg ${msg[0]}">${msg[1]}</div>` : ''}
-    <div class="row"><label class="btn primary">${c.foto ? 'Cambiar foto' : 'Elegir o tomar foto'}<input type="file" id="foto-in" accept="image/*" hidden></label>
+    ${c.fotoRev ? `<div class="msg err">La subió el alumno desde el link del correo y <strong>aún no se muestra</strong> en las páginas públicas. Si es su cara, apruébala.</div>
+      <div class="row"><button type="button" class="btn primary" data-act="foto-ok">Aprobar foto</button></div>` : ''}
+    <div class="row"><label class="btn ${c.fotoRev ? '' : 'primary'}">${c.foto ? 'Cambiar foto' : 'Elegir o tomar foto'}<input type="file" id="foto-in" accept="image/*" hidden></label>
       ${c.foto ? '<button type="button" class="btn danger" data-act="foto-quitar">Quitar foto</button>' : ''}
       <button type="button" class="btn" data-act="pz-cancel">Cerrar</button></div>
     <p class="hint">Se ve en las llaves en vivo, que son públicas. Desde el celular puedes tomarla con la cámara, por ejemplo en el pesaje.</p>
@@ -331,7 +333,7 @@ async function subirFoto(file){
     const foto = await achicarFoto(file);
     await apiFoto('PUT', {id, foto});
   } catch (e){ return openFoto(id, ['err', esc(e.message === 'foto' ? 'No se pudo leer esa foto. Prueba con otra.' : e.message)]); }
-  mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) c.foto = (c.foto || 0) + 1; });
+  mutate(st => { const c = st.competitors.find(x => x.id === id); if (c){ c.foto = (c.foto || 0) + 1; delete c.fotoRev; } });
   openFoto(id, ['ok', 'Foto guardada.']);
 }
 
@@ -341,6 +343,7 @@ async function subirFoto(file){
 const GRUPOS = [
   ['todos', 'Todos los inscritos', () => true],
   ['sinpesaje', 'Los que aún no se pesan', c => !c.weighed],
+  ['sinfoto', 'Los que no tienen foto', c => !c.foto],
   ...CATS.map(k => [k.id, k.label, c => c.cats.includes(k.id)]),
 ];
 function openEnviar(pre = {}){
@@ -356,6 +359,12 @@ function openEnviar(pre = {}){
   </form>`;
   $('pesaje').showModal();
   enviarLinks();
+}
+// Al elegir "Los que no tienen foto" con el mensaje vacío, se escribe el aviso con el link para subirla.
+function avisoFoto(){
+  if ($('ev-grupo').value !== 'sinfoto' || $('ev-msg').value.trim()) return;
+  $('ev-asunto').value = 'Sube tu foto · Campeonato de Lucha de Brazos Mecánica 2026';
+  $('ev-msg').value = `Hola:\n\nEn las llaves del campeonato se mostrará la cara de cada participante y aún no tenemos tu foto. Súbela aquí, es opcional y toma un minuto:\n\n${location.origin}/mi-foto\n\nUsa el mismo correo con que te inscribiste. Una foto de tu cara, de frente.\n\n¡Nos vemos el 24 de noviembre!`;
 }
 function enviarLinks(){
   const [, , fn] = GRUPOS.find(g => g[0] === $('ev-grupo').value);
@@ -437,9 +446,10 @@ document.addEventListener('click', e => {
   if (a === 'pz-cancel') return $('pesaje').close();
   if (a === 'correo') return openCorreo(d.id);
   if (a === 'foto') return openFoto(d.id);
+  if (a === 'foto-ok'){ const id = fotoId; mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) delete c.fotoRev; }); return openFoto(id, ['ok', 'Foto aprobada: ya se ve en las llaves.']); }
   if (a === 'foto-quitar'){
     const id = fotoId;
-    apiFoto('DELETE', null, id).then(() => { mutate(st => { const c = st.competitors.find(x => x.id === id); if (c) delete c.foto; }); openFoto(id); })
+    apiFoto('DELETE', null, id).then(() => { mutate(st => { const c = st.competitors.find(x => x.id === id); if (c){ delete c.foto; delete c.fotoRev; } }); openFoto(id); })
       .catch(e => openFoto(id, ['err', esc(e.message)]));
     return;
   }
@@ -498,6 +508,7 @@ document.addEventListener('change', e => {
 
 document.addEventListener('input', e => {
   if (e.target.id === 'pz-w') pesajeResult();
+  if (e.target.id === 'ev-grupo') avisoFoto();
   if (e.target.closest('#enviar-form')) enviarLinks();
 });
 

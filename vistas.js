@@ -5,7 +5,8 @@ import {cara} from './fotos.js';
 const bo3Text = m => `Mejor de 3 · ${m.score[0]}–${m.score[1]}`;
 const nameOf = (br, id) => br.entrants.find(e => e.id === id) || {name:'—', club:''};
 // Igual que nameOf, más la foto actual del competidor (la llave guarda solo nombre y curso).
-const conFoto = (S, br, id) => ({...nameOf(br, id), foto:S.competitors.find(c => c.id === id)?.foto});
+// Una foto subida por el alumno no se muestra hasta que el organizador la aprueba (fotoRev).
+const conFoto = (S, br, id) => { const c = S.competitors.find(x => x.id === id); return {...nameOf(br, id), foto:c && !c.fotoRev ? c.foto : undefined}; };
 
 export function catChips(S, current){
   const chip = c => { const st = catStatus(S, c.id); return `<button data-act="cat" data-cat="${c.id}" aria-pressed="${current === c.id}" title="${c.label}: ${statusText[st]}"><span class="dot ${st}"></span>${c.weight}</button>`; };

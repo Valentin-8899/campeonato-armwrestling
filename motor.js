@@ -114,7 +114,7 @@ export function fotoB64(dataUrl){
 
 // Lo que ve cualquier persona: sin peso, pesaje ni correo.
 export function publicState(st){
-  return {competitors:st.competitors.map(c => ({id:c.id, name:c.name, club:c.club, cats:c.cats, ...(c.foto ? {foto:c.foto} : {})})), brackets:st.brackets};
+  return {competitors:st.competitors.map(c => ({id:c.id, name:c.name, club:c.club, cats:c.cats, ...(c.foto && !c.fotoRev ? {foto:c.foto} : {})})), brackets:st.brackets};
 }
 
 /* ---------- motor de doble eliminación ---------- */

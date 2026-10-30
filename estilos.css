@@ -187,3 +187,5 @@ nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accen
 .facebtn{background:none;border:0;padding:0;cursor:pointer;border-radius:50%}
 .facebtn:hover .face{border-color:var(--accent)}
 .fotopick{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.face.rev{border:2px solid var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+.revtxt{color:var(--accent)}
