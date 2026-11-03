@@ -58,6 +58,22 @@ export const clubDe = (career, year, section) => `${career}${year ? ' · ' + yea
 // Año y sección de un competidor (los inscritos antes de guardarlos aparte los tienen solo dentro de club).
 export const cursoDe = c => ({year:c.year ?? (/· (\d°) año/.exec(c.club || '') || [])[1] ?? '', section:c.section ?? (/Sec\. (.+)$/.exec(c.club || '') || [])[1] ?? ''});
 
+// Nombre para comparar: sin tildes, mayúsculas ni espacios de más ("José  Pérez" = "jose perez").
+export const nombreClave = n => String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+export const MSG_YA_INSCRITO = 'No necesitas inscribirte de nuevo: para cambiar tus datos o tu foto usa el link personal que te llegó al correo de confirmación.';
+// Inscritos que parecen la misma persona (mismo correo, o mismo nombre y primer apellido), para avisar al organizador.
+export function posiblesDuplicados(st){
+  const grupos = new Map();
+  for (const c of st.competitors) for (const k of [c.email && 'e:' + c.email, 'n:' + nombreClave(c.name).split(' ').slice(0, 2).join(' ')]){
+    if (!k) continue;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(c.id);
+  }
+  const dup = new Set();
+  for (const ids of grupos.values()) if (ids.length > 1) ids.forEach(id => dup.add(id));
+  return dup;
+}
+
 // Valida una ficha de inscripción. Devuelve {error} o {competitor} listo para agregar.
 export function validarInscripcion(st, d){
   const txt = (v, max) => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
@@ -77,7 +93,9 @@ export function validarInscripcion(st, d){
   if (d.ld) cats.push('ld');
   if (d.li) cats.push('li');
   if (!cats.length) return {error:isMeca ? 'Elige al menos una categoría.' : `Elige al menos una categoría libre. Las de peso son solo para ${MECA}.`};
-  if (st.competitors.some(c => c.name.toLowerCase() === name.toLowerCase())) return {error:`${name} ya está inscrito. Si hay un error, pide al organizador que lo corrija.`};
+  // Un alumno que vuelve a llenar la ficha para cambiar algo no debe quedar inscrito dos veces.
+  const mismo = st.competitors.find(c => c.email === email) || st.competitors.find(c => nombreClave(c.name) === nombreClave(name));
+  if (mismo) return {error:`${mismo.name} ya está inscrito. ${MSG_YA_INSCRITO}`, yaInscrito:mismo};
   for (const id of cats){ const e = cupoError(st, id); if (e) return {error:e}; }
   return {competitor:{id:uid(), name, email, career, club:clubDe(career, year, section), year, section, weight:Math.round(weight * 10) / 10, cats, weighed:false, at:Date.now()}};
 }

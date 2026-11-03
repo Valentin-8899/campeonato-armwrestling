@@ -30,7 +30,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk} from '/motor.js';
+import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk, posiblesDuplicados} from '/motor.js';
 import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
 import {achicarFoto, cara} from '/fotos.js';
 
@@ -188,8 +188,9 @@ function viewLlaves(){
 function viewCompetidores(){
   const list = S.competitors.filter(c => ui.filter === 'todas' || c.cats.includes(ui.filter)).slice().sort((a, b) => a.weight - b.weight);
   const opts = ['<option value="todas">Todas las categorías</option>'].concat(CATS.map(c => `<option value="${c.id}" ${ui.filter === c.id ? 'selected' : ''}>${c.label} (${members(S, c.id).length})</option>`)).join('');
+  const dup = posiblesDuplicados(S);
   const rows = list.map(c => `<tr>
-      <td><div class="who"><button class="facebtn" data-act="foto" data-id="${c.id}" title="${c.foto ? 'Cambiar' : 'Agregar'} foto de ${esc(c.name)}">${cara(c, 'md' + (c.fotoRev ? ' rev' : ''))}</button><div><strong>${esc(c.name)}</strong><br>${c.email
+      <td><div class="who"><button class="facebtn" data-act="foto" data-id="${c.id}" title="${c.foto ? 'Cambiar' : 'Agregar'} foto de ${esc(c.name)}">${cara(c, 'md' + (c.fotoRev ? ' rev' : ''))}</button><div><strong>${esc(c.name)}</strong>${dup.has(c.id) ? ' <span class="chip dup" title="Hay otra ficha con un nombre o correo parecido">¿Repetido?</span>' : ''}<br>${c.email
         ? `<button class="linkbtn" data-act="correo" data-id="${c.id}" title="${c.avisado ? 'Confirmación enviada. ' : ''}Cambiar correo">${c.avisado ? '✓ ' : ''}${esc(c.email)}</button>`
         : `<button class="linkbtn falta" data-act="correo" data-id="${c.id}">+ Agregar correo</button>`}</div></div></td>
       <td>${esc(c.club || '—')}</td>
@@ -206,7 +207,7 @@ function viewCompetidores(){
       <div class="row">${porConfirmar().length ? `<button class="btn small" data-act="confirmar">Enviar confirmaciones (${porConfirmar().length})</button>` : ''}${S.competitors.some(c => c.email) ? '<button class="btn small primary" data-act="enviar">Enviar correo</button>' : ''}${list.some(c => c.email) ? `<button class="btn small" data-act="copy-mails">Copiar correos (${list.filter(c => c.email).length})</button>` : ''}
       <label class="f" style="flex-direction:row;align-items:center;gap:8px"><span class="muted">Ver</span><select id="filter" style="width:auto">${opts}</select></label></div></div>
     ${ui.confMsg ? `<div class="msg ${ui.confMsg[0]}">${ui.confMsg[1]}</div>` : ''}
-    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}${S.competitors.some(c => c.fotoRev) ? `<strong class="revtxt">${S.competitors.filter(c => c.fotoRev).length} foto${S.competitors.filter(c => c.fotoRev).length === 1 ? '' : 's'} por revisar</strong> (toca la cara marcada en rojo). ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
+    <p class="muted">${list.length} competidor${list.length === 1 ? '' : 'es'}. ${S.competitors.filter(c => c.weighed).length} de ${S.competitors.length} pesados. ${S.competitors.filter(c => !c.email).length ? `${S.competitors.filter(c => !c.email).length} sin correo. ` : ''}${S.competitors.some(c => c.fotoRev) ? `<strong class="revtxt">${S.competitors.filter(c => c.fotoRev).length} foto${S.competitors.filter(c => c.fotoRev).length === 1 ? '' : 's'} por revisar</strong> (toca la cara marcada en rojo). ` : ''}${dup.size ? `<strong class="revtxt">${dup.size} fichas marcadas ¿Repetido?</strong>: tienen el mismo nombre o correo. Si son la misma persona, deja una y quita la otra. ` : ''}Toca <strong>Pesar</strong> cuando cada uno pase por la balanza: anotas su peso real y, si corresponde, pasa solo a su categoría.</p>
     <div class="tablewrap"><table>
       <thead><tr><th>Nombre</th><th>Carrera y curso</th><th>Peso</th><th>Categorías</th><th>Pesaje</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="empty">Nadie inscrito todavía.</td></tr>'}</tbody>

@@ -124,4 +124,20 @@ test('confirmación por correo con link personal para actualizar datos y foto', 
   const viejo = (await call(estado, 'GET', null, {'x-clave':'prueba'})).state.competitors.find(c => c.id === 'viejo1');
   assert.ok(viejo.token && viejo.avisado);
   assert.ok(enviados.some(x => x.to === 'viejo@mail.cl' && x.text.includes(viejo.token)));
+
+  // Si vuelve a llenar la ficha con su correo, no queda inscrito dos veces: recibe de nuevo su link (salvo que se haya enviado recién).
+  const antes = (await call(estado, 'GET', null, {'x-clave':'prueba'})).state.competitors.length;
+  const otra = await call(inscribir, 'POST', {name:'Caro Link Soto', email:'caro.nueva@mail.cl', career:'meca', year:'4°', section:'401', weight:61, peso:true}, {host:'localhost:3000'});
+  assert.deepEqual([otra.status, otra.yaInscrito], [409, true]);
+  assert.match(otra.error, /ya estás inscrito/);
+  const otraNombre = await call(inscribir, 'POST', {name:'caro  link', email:'otro@mail.cl', career:'meca', weight:61, peso:true});
+  assert.deepEqual([otraNombre.status, otraNombre.yaInscrito], [409, undefined]);
+  assert.equal((await call(estado, 'GET', null, {'x-clave':'prueba'})).state.competitors.length, antes);
+  const n = enviados.length;
+  const full2 = await call(estado, 'GET', null, {'x-clave':'prueba'});
+  full2.state.competitors.find(c => c.id === 'viejo1').avisado = Date.now() - 3600e3;
+  await call(estado, 'PUT', {version:full2.version, state:full2.state}, {'x-clave':'prueba'});
+  await call(inscribir, 'POST', {name:'Viejo Uno', email:'viejo@mail.cl', career:'meca', weight:70, peso:true}, {host:'localhost:3000'});
+  assert.equal(enviados.length, n + 1);
+  assert.ok(enviados.at(-1).text.includes(viejo.token));
 });
