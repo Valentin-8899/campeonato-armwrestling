@@ -2,10 +2,16 @@
 // Lo usan las páginas (en el navegador) y las funciones de /api (en el servidor).
 
 export const MECA = 'Mecánica Automotriz';
+export const MANT = 'Mantenimiento Industrial';
+// Carreras del área de Mecánica: las únicas que compiten en las categorías de peso.
+export const CARRERAS_AREA = {meca:MECA, mant:MANT};
+export const AREA_TEXTO = `${MECA} y ${MANT}`;
+// Reconoce una carrera del área escrita a mano ("mantencion industrial", "Mecanica automotriz"…). Devuelve su nombre oficial o null.
+export const carreraArea = txt => /mec[aá]nica\s+automotriz/i.test(txt) ? MECA : /mant[a-zñáéíóú]*\s+industrial/i.test(txt) ? MANT : null;
 export const BYE = '__BYE__';
 const WEIGHTS = [['m70', '-70 kg'], ['m80', '-80 kg'], ['m90', '-90 kg'], ['m100', '-100 kg'], ['p100', '+100 kg']];
 const ARMS = {d:'derecho', i:'izquierdo'};
-// Las categorías de peso se compiten solo con brazo derecho y son solo para Mecánica Automotriz.
+// Las categorías de peso se compiten solo con brazo derecho y son solo para el área de Mecánica (Mecánica Automotriz y Mantenimiento Industrial).
 // Las libres se compiten con derecho e izquierdo y están abiertas a todas las carreras.
 export const CATS = [
   ...WEIGHTS.map(([w, l]) => ({id:w + 'd', label:l, short:l.replace(' kg', ''), weight:l, arm:'d', group:'peso', max:8})),
@@ -78,8 +84,8 @@ export function posiblesDuplicados(st){
 export function validarInscripcion(st, d){
   const txt = (v, max) => String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max);
   const name = txt(d.name, 80);
-  const isMeca = d.career === 'meca';
-  const career = isMeca ? MECA : txt(d.other, 80);
+  const career = CARRERAS_AREA[d.career] || carreraArea(txt(d.other, 80)) || txt(d.other, 80);
+  const isMeca = Object.values(CARRERAS_AREA).includes(career);
   const year = YEARS.includes(d.year) ? d.year : '';
   const section = txt(d.section, 20);
   const weight = parseFloat(String(d.weight ?? '').replace(',', '.'));
@@ -92,7 +98,7 @@ export function validarInscripcion(st, d){
   if (isMeca && d.peso) cats.push(weightCat(weight) + 'd');
   if (d.ld) cats.push('ld');
   if (d.li) cats.push('li');
-  if (!cats.length) return {error:isMeca ? 'Elige al menos una categoría.' : `Elige al menos una categoría libre. Las de peso son solo para ${MECA}.`};
+  if (!cats.length) return {error:isMeca ? 'Elige al menos una categoría.' : `Elige al menos una categoría libre. Las de peso son solo para ${AREA_TEXTO}.`};
   // Un alumno que vuelve a llenar la ficha para cambiar algo no debe quedar inscrito dos veces.
   const mismo = st.competitors.find(c => c.email === email) || st.competitors.find(c => nombreClave(c.name) === nombreClave(name));
   if (mismo) return {error:`${mismo.name} ya está inscrito. ${MSG_YA_INSCRITO}`, yaInscrito:mismo};

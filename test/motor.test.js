@@ -55,7 +55,12 @@ test('la ficha aplica la regla de Mecánica, los cupos y los duplicados', () => 
   assert.equal(posiblesDuplicados(st).size, 2);
   st.competitors.pop();
   const otra = validarInscripcion(st, {name:'Luis Rojas', email:'luis@mail.cl', career:'otra', other:'Electricidad', weight:90, peso:true});
-  assert.match(otra.error, /solo para Mecánica/);
+  assert.match(otra.error, /solo para Mecánica Automotriz y Mantenimiento Industrial/);
+  // Mantenimiento Industrial también es del área de Mecánica: compite en las de peso, elegida en la lista o escrita a mano.
+  const mant = validarInscripcion(st, {name:'Pía Lagos', email:'pia@mail.cl', career:'mant', year:'1°', weight:66, peso:true, li:true});
+  assert.deepEqual([mant.competitor.career, mant.competitor.cats], ['Mantenimiento Industrial', ['m70d', 'li']]);
+  const escrita = validarInscripcion(st, {name:'Tomás Vera', email:'tomas@mail.cl', career:'otra', other:'mantencion industrial', weight:95, peso:true});
+  assert.deepEqual([escrita.competitor.career, escrita.competitor.cats], ['Mantenimiento Industrial', ['m100d']]);
   assert.match(validarInscripcion(st, {...base, name:'Sin Correo', email:'sin-arroba'}).error, /correo válido/);
   for (let i = 0; i < 7; i++) st.competitors.push({id:'x' + i, name:'X' + i, cats:['m80d']});
   assert.match(validarInscripcion(st, {...base, name:'Otro Más', email:'otro.mas@mail.cl', ld:false}).error, /8 cupos/);
