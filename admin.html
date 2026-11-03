@@ -30,7 +30,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import {CATS, MECA, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk, posiblesDuplicados} from '/motor.js';
+import {CATS, AREA_TEXTO, carreraArea, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk, posiblesDuplicados} from '/motor.js';
 import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
 import {achicarFoto, cara} from '/fotos.js';
 
@@ -142,13 +142,14 @@ function importRows(st, text){
     const name = get(ci.name).replace(/\s+/g, ' ');
     if (!name || st.competitors.some(x => x.name.toLowerCase() === name.toLowerCase())) continue;
     const careerRaw = get(ci.career);
-    const isMeca = /mec[aá]nica automotriz/i.test(careerRaw);
-    const career = isMeca ? MECA : (get(ci.other) || careerRaw || 'Otra carrera');
+    const area = carreraArea(careerRaw) || carreraArea(get(ci.other));
+    const isMeca = !!area;
+    const career = area || get(ci.other) || careerRaw || 'Otra carrera';
     const weight = parseFloat(get(ci.weight).replace(',', '.').replace(/[^0-9.]/g, ''));
     const sel = get(ci.cats).toLowerCase();
     const cats = [];
     const wantPeso = /peso/.test(sel);
-    if (wantPeso && !isMeca) notes.push(`${esc(name)}: las categorías de peso son solo para ${MECA}; quedó solo en las libres.`);
+    if (wantPeso && !isMeca) notes.push(`${esc(name)}: las categorías de peso son solo para ${AREA_TEXTO}; quedó solo en las libres.`);
     if (wantPeso && isMeca && !(weight >= 30)) notes.push(`${esc(name)}: sin peso válido, no se asignó categoría de peso.`);
     if (wantPeso && isMeca && weight >= 30) cats.push(weightCat(weight) + 'd');
     if (/libre[^,]*derech/.test(sel)) cats.push('ld');
