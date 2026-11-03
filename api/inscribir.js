@@ -17,6 +17,7 @@ export default async function handler(req, res){
     for (let i = 0; i < 6; i++){
       const {state, version} = await read();
       const v = validarInscripcion(state, datos);
+      if (v.yaInscrito) return send(res, 409, await yaInscrito(v.yaInscrito, datos, origen(req)));
       if (v.error) return send(res, 400, {error:v.error});
       const c = v.competitor;
       c.token = randomBytes(16).toString('base64url');
@@ -43,4 +44,27 @@ export async function confirmar(c, base){
     if (err.message !== 'sin_configurar') console.error('No se pudo enviar la confirmación:', err.message);
     return false;
   }
+}
+
+// Quien vuelve a llenar la ficha con su mismo correo recibe otra vez su link personal, en vez de quedar inscrito dos veces.
+// Solo se envía al correo ya registrado, así que nadie recibe el link de otro.
+async function yaInscrito(c, datos, base){
+  const email = String(datos.email || '').trim().toLowerCase();
+  if (c.email !== email) return {error:`${c.name} ya está inscrito con otro correo. Para cambiar tus datos usa el link de tu correo de confirmación, o pídele al organizador que lo corrija.`};
+  let token = c.token;
+  if (!token){
+    const r = await actualizar(st => {
+      const x = st.competitors.find(y => y.id === c.id);
+      if (!x) return {sinCambios:true};
+      x.token ||= randomBytes(16).toString('base64url');
+      return {token:x.token};
+    });
+    token = r.token;
+  }
+  // Si el link se envió hace poco, no se manda de nuevo (así nadie llena la casilla de otro con correos repetidos).
+  const reciente = c.avisado && Date.now() - c.avisado < 10 * 60e3;
+  const reenviado = !reciente && !!token && await confirmar({...c, token}, base);
+  return {error:`${c.name}, ya estás inscrito. No necesitas inscribirte de nuevo. ${reenviado || reciente
+    ? 'Te enviamos a tu correo el link personal para cambiar tus datos o tu foto (revisa también la carpeta de spam).'
+    : 'Para cambiar tus datos o tu foto usa el link personal que te llegó al correo de confirmación.'}`, yaInscrito:true};
 }

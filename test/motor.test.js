@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {makeBracket, compute, addWin, undoWin, validarInscripcion, emptyState, MECA} from '../motor.js';
+import {makeBracket, compute, addWin, undoWin, validarInscripcion, posiblesDuplicados, emptyState, MECA} from '../motor.js';
 
 const people = n => [...Array(n)].map((_, i) => ({id:'p' + i, name:'P' + i, club:''}));
 
@@ -44,11 +44,21 @@ test('la ficha aplica la regla de Mecánica, los cupos y los duplicados', () => 
   assert.equal(ok.competitor.club, `${MECA} · 2° año · Sec. 201`);
   st.competitors.push(ok.competitor);
   assert.match(validarInscripcion(st, base).error, /ya está inscrito/);
+  // Volver a llenar la ficha para "actualizar" no crea otra inscripción: mismo correo, o mismo nombre con otras tildes o espacios.
+  assert.equal(validarInscripcion(st, {...base, name:'Ana María Díaz', year:'3°'}).yaInscrito, ok.competitor);
+  assert.equal(validarInscripcion(st, {...base, name:'  ana   diaz ', email:'otro@mail.cl'}).yaInscrito, ok.competitor);
+  assert.equal(posiblesDuplicados(st).size, 0);
+  st.competitors.push({...ok.competitor, id:'copia', name:'Ana Diaz', email:'otro@mail.cl'});
+  assert.deepEqual([...posiblesDuplicados(st)].sort(), ['copia', ok.competitor.id].sort());
+  st.competitors.pop();
+  st.competitors.push({...ok.competitor, id:'copia', name:'Ana Diaz Soto', email:'otro@mail.cl'});
+  assert.equal(posiblesDuplicados(st).size, 2);
+  st.competitors.pop();
   const otra = validarInscripcion(st, {name:'Luis Rojas', email:'luis@mail.cl', career:'otra', other:'Electricidad', weight:90, peso:true});
   assert.match(otra.error, /solo para Mecánica/);
   assert.match(validarInscripcion(st, {...base, name:'Sin Correo', email:'sin-arroba'}).error, /correo válido/);
   for (let i = 0; i < 7; i++) st.competitors.push({id:'x' + i, name:'X' + i, cats:['m80d']});
-  assert.match(validarInscripcion(st, {...base, name:'Otro Más', ld:false}).error, /8 cupos/);
+  assert.match(validarInscripcion(st, {...base, name:'Otro Más', email:'otro.mas@mail.cl', ld:false}).error, /8 cupos/);
 });
 
 test('pesaje: mueve a la categoría del peso real, o a la libre si no hay cupo', async () => {
