@@ -8,10 +8,11 @@ import inscribir from './api/inscribir.js';
 import foto from './api/foto.js';
 import misDatos from './api/mis-datos.js';
 import confirmaciones from './api/confirmaciones.js';
+import diplomas from './api/diplomas.js';
 
 const root = new URL('.', import.meta.url).pathname;
 const types = {'.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.pdf':'application/pdf'};
-const api = {'/api/estado':estado, '/api/inscribir':inscribir, '/api/foto':foto, '/api/mis-datos':misDatos, '/api/confirmaciones':confirmaciones};
+const api = {'/api/estado':estado, '/api/inscribir':inscribir, '/api/foto':foto, '/api/mis-datos':misDatos, '/api/confirmaciones':confirmaciones, '/api/diplomas':diplomas};
 
 createServer(async (req, res) => {
   const path = new URL(req.url, 'http://x').pathname;
