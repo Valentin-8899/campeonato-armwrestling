@@ -30,7 +30,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import {CATS, AREA_TEXTO, carreraArea, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk, posiblesDuplicados} from '/motor.js';
+import {CATS, AREA_TEXTO, carreraArea, catById, weightCat, members, cupoError, clean, uid, esc, makeBracket, compute, addWin, undoWin, catStatus, seedExample, planPesaje, aplicarPesaje, correoOk, posiblesDuplicados, ganadoresDiploma} from '/motor.js';
 import {catChips, viewVivo, viewCategoria, viewPodio, viewCupos} from '/vistas.js';
 import {achicarFoto, cara} from '/fotos.js';
 
@@ -405,7 +405,33 @@ function viewPodioAdmin(){
   return `<section class="panel"><div class="row" style="justify-content:space-between"><div><h3>Resultados en PDF</h3>
     <p class="hint">Descarga el podio de las 7 categorías en un PDF y envíalo a los participantes.</p></div>
     <div class="row"><button class="btn primary" data-act="pdf">Descargar PDF</button><button class="btn" data-act="pdf-mail">Enviar resultados por correo</button></div></div>
-    <div id="pdf-msg"></div></section>` + viewPodio(S);
+    <div id="pdf-msg"></div></section>` + viewDiplomas() + viewPodio(S);
+}
+
+/* ---------- diplomas digitales ---------- */
+// A los 1°, 2° y 3° de cada categoría terminada les llega por correo su diploma con su nombre.
+function viewDiplomas(){
+  const g = ganadoresDiploma(S), pend = g.filter(x => !x.enviado && x.c.email), sin = g.filter(x => !x.c.email);
+  const fila = x => `<li><strong>${x.lugar}°</strong> ${esc(x.cat.label)}: ${esc(x.c.name)} · <span class="hint">${x.enviado ? '✓ enviado' : x.c.email ? 'por enviar' : 'sin correo'}</span></li>`;
+  return `<section class="panel"><div class="row" style="justify-content:space-between"><div><h3>Diplomas digitales</h3>
+    <p class="hint">A los 1°, 2° y 3° de cada categoría terminada les llega a su correo el diploma en PDF con su nombre. Revisa que los resultados estén bien antes de enviar.</p></div>
+    ${pend.length ? `<button class="btn primary" data-act="diplomas">Enviar diplomas (${pend.length})</button>` : ''}</div>
+    ${ui.dipMsg ? `<div class="msg ${ui.dipMsg[0]}">${ui.dipMsg[1]}</div>` : ''}
+    ${g.length ? `<ul class="diplomas">${g.map(fila).join('')}</ul>` : '<p class="empty">Aún no termina ninguna categoría.</p>'}
+    ${sin.length ? `<p class="hint">${sin.length} ganador${sin.length === 1 ? '' : 'es'} sin correo: agrégalo en Competidores para poder enviarle su diploma.</p>` : ''}</section>`;
+}
+async function enviarDiplomas(){
+  let total = 0;
+  for (;;){
+    ui.dipMsg = ['ok', `Enviando diplomas… ${total} enviado${total === 1 ? '' : 's'}.`]; render();
+    let r, j = {};
+    try { r = await fetch('/api/diplomas', {method:'POST', headers:{'x-clave':clave}}); j = await r.json().catch(() => ({})); } catch { r = {ok:false}; j = {error:'No hay conexión.'}; }
+    if (!r.ok){ ui.dipMsg = ['err', j.error === 'sin_configurar' ? SIN_GMAIL : esc(j.error || 'No se pudieron enviar.')]; break; }
+    total += j.enviados;
+    if (!j.faltan){ ui.dipMsg = ['ok', `Listo: ${total} diploma${total === 1 ? '' : 's'} enviado${total === 1 ? '' : 's'} por correo.`]; break; }
+  }
+  await poll();
+  render();
 }
 function cargarJsPDF(){
   if (window.jspdf) return Promise.resolve();
@@ -477,6 +503,7 @@ document.addEventListener('click', e => {
   if (a === 'enviar') return openEnviar();
   if (a === 'confirmar'){ t.disabled = true; return enviarConfirmaciones(); }
   if (a === 'pdf') return descargarPDF();
+  if (a === 'diplomas'){ t.disabled = true; return enviarDiplomas(); }
   if (a === 'pdf-mail') return openEnviar({adjunto:true, asunto:'Resultados · Campeonato de Lucha de Brazos Mecánica 2026', msg:'Hola:\n\nTe enviamos los resultados oficiales del Campeonato de Lucha de Brazos Mecánica 2026 en el PDF adjunto.\n\n¡Gracias por participar!'});
   if (a === 'copy-mails'){
     const mails = S.competitors.filter(c => c.email && (ui.filter === 'todas' || c.cats.includes(ui.filter))).map(c => c.email);

@@ -2,6 +2,7 @@
   "cleanUrls": true,
   "functions": {
     "api/inscribir.js": {"maxDuration": 30, "includeFiles": "reglamento.pdf"},
-    "api/confirmaciones.js": {"maxDuration": 60, "includeFiles": "reglamento.pdf"}
+    "api/confirmaciones.js": {"maxDuration": 60, "includeFiles": "reglamento.pdf"},
+    "api/diplomas.js": {"maxDuration": 60, "includeFiles": "diplomas/**"}
   }
 }

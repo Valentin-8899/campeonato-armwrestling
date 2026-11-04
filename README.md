@@ -10,6 +10,10 @@ Plataforma para inscribir alumnos y llevar en vivo un campeonato de lucha de bra
 | `/llaves` | Público | Llaves, próximas luchas y podio en vivo, solo lectura. Se actualiza sola cada 5 segundos. |
 | `/admin` | Organizador | Competidores, pesaje, sorteo, marcar ganadores, deshacer, podio y links para compartir. Pide clave. |
 
+## Diplomas digitales
+
+En `/admin`, pestaña **Podio**, el botón **Enviar diplomas** manda por correo a los 1°, 2° y 3° de cada categoría terminada un diploma en PDF con su nombre (`lib/diploma.js`). Cada uno lo recibe una sola vez. Los fondos de cada categoría y lugar están en `diplomas/`. Usa el mismo Gmail de las confirmaciones.
+
 ## Reglas del campeonato
 
 - Categorías de peso (-70, -80, -90, -100, +100 kg): solo brazo derecho, solo alumnos de Mecánica Automotriz y Mantenimiento Industrial, 8 cupos cada una.
