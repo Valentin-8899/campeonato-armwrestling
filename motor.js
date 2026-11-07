@@ -178,7 +178,6 @@ export function compute(br){
     for (let i = 0; i < (P >> (Math.floor((k + 1) / 2) + 1)); i++) add(`L${k}-${i}`, 'L', k, i, key);
   }
   add('GF', 'F', 1, 0, 1000);
-  add('GF2', 'F', 2, 0, 1001);
 
   const seeds = seedOrder(P), n = br.entrants.length;
   const pl = s => s <= n ? br.entrants[s - 1].id : BYE;
@@ -196,10 +195,8 @@ export function compute(br){
       if (k === LR) put('GF', 1, m.w);
       else if (k % 2 === 1) put(`L${k + 1}-${m.i}`, 0, m.w);
       else put(`L${k + 1}-${m.i >> 1}`, m.i & 1, m.w);
-    } else if (m.id === 'GF'){
-      // Si gana quien viene invicto, se acaba. Si gana quien viene del repechaje, hay final decisiva.
-      if (m.w === m.s[0]) M.GF2.skip = true; else M.GF2.s = [m.s[0], m.s[1]];
     }
+    // La final (invicto contra ganador del repechaje) se juega una sola vez: quien la gana es campeón.
   };
 
   br.results = br.results || {};
@@ -222,6 +219,8 @@ export function compute(br){
   }
   for (const id of Object.keys(br.results)) if (!applied.has(id)) delete br.results[id];
   br.pulls = br.pulls || {};
+  // Torneos guardados antes de quitar la final decisiva pueden traer resultados o pulsos de 'GF2'.
+  for (const id of Object.keys(br.pulls)) if (!M[id]) delete br.pulls[id];
   for (const id of order){
     const m = M[id], pulls = br.pulls[id];
     m.bo3 = m.b === 'F';
@@ -229,7 +228,7 @@ export function compute(br){
     m.score = m.s.map(v => (br.pulls[id] || []).filter(x => x === v).length);
   }
 
-  const fin = M.GF2.done ? M.GF2 : (M.GF.done && M.GF2.skip ? M.GF : null);
+  const fin = M.GF.done ? M.GF : null;
   let podium = null;
   if (fin){
     const real = v => v && v !== BYE ? v : null;
@@ -243,10 +242,10 @@ export function compute(br){
 export function roundName(m, R, LR){
   if (m.b === 'W') return m.r === R ? 'Final de ganadores' : m.r === R - 1 ? 'Semifinal ganadores' : `Ronda ${m.r}`;
   if (m.b === 'L') return m.r === LR ? 'Final de repechaje' : LR > 1 && m.r === LR - 1 ? 'Por 3° y 4° lugar' : `Repechaje ${m.r}`;
-  return m.id === 'GF' ? 'Final 1° y 2°' : 'Final decisiva';
+  return 'Final 1° y 2°';
 }
 
-// Todo a un pulso, salvo la final de 1°-2° (y su final decisiva), que va al mejor de 3.
+// Todo a un pulso, salvo la final de 1°-2°, que va al mejor de 3.
 export function addWin(br, m, p){
   if (!m.bo3){ br.results[m.id] = p; return; }
   const pulls = br.pulls[m.id] = br.pulls[m.id] || [];

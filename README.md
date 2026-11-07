@@ -18,7 +18,7 @@ En `/admin`, pestaña **Podio**, el botón **Enviar diplomas** manda por correo 
 
 - Categorías de peso (-70, -80, -90, -100, +100 kg): solo brazo derecho, solo alumnos de Mecánica Automotriz y Mantenimiento Industrial, 8 cupos cada una.
 - Libre brazo derecho y libre brazo izquierdo: abiertas a todas las carreras de Inacap, 16 cupos cada una.
-- Doble eliminación. Todo a un pulso, salvo la final de 1° y 2° (y la final decisiva, si se juega), que va al mejor de 3.
+- Doble eliminación. Todo a un pulso, salvo la final de 1° y 2°, que va al mejor de 3. La final se juega una sola vez: quien la gana es campeón (no hay final decisiva).
 - Al sortear una categoría se cierra su inscripción.
 
 Las reglas están en `motor.js`.

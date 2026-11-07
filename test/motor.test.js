@@ -4,7 +4,7 @@ import {makeBracket, compute, addWin, undoWin, validarInscripcion, posiblesDupli
 
 const people = n => [...Array(n)].map((_, i) => ({id:'p' + i, name:'P' + i, club:''}));
 
-test('cada llave termina con un campeón que perdió a lo más una vez y todos los demás eliminados con dos derrotas', () => {
+test('cada llave termina con un campeón, un 2° que perdió la final y todos los demás eliminados con dos derrotas', () => {
   for (const n of [2, 3, 5, 8, 11, 16]){
     for (let t = 0; t < 40; t++){
       const br = makeBracket(people(n));
@@ -18,9 +18,12 @@ test('cada llave termina con un campeón que perdió a lo más una vez y todos l
       }
       const losses = {};
       for (const id of c.order){ const m = c.M[id]; if (m.done && !m.bye) losses[m.l] = (losses[m.l] || 0) + 1; }
-      const champ = c.podium[0];
+      const [champ, second] = c.podium;
       assert.ok((losses[champ] || 0) <= 1);
-      for (const p of people(n)) if (p.id !== champ) assert.ok((losses[p.id] || 0) >= 2, `${p.id} no fue eliminado (n=${n})`);
+      assert.equal(c.M.GF.w, champ);
+      assert.equal(c.M.GF.l, second);
+      assert.ok(!c.M.GF2, 'no hay final decisiva');
+      for (const p of people(n)) if (p.id !== champ && p.id !== second) assert.ok((losses[p.id] || 0) >= 2, `${p.id} no fue eliminado (n=${n})`);
     }
   }
 });
@@ -108,4 +111,19 @@ test('las inscripciones y cambios de alumnos cierran al terminar el 23 de noviem
   assert.equal(abierto(Date.parse('2026-11-23T23:59:00-03:00')), true);
   assert.equal(abierto(Date.parse('2026-11-24T00:00:00-03:00')), false);
   assert.equal(abierto(Date.parse('2026-11-24T14:00:00-03:00')), false);
+});
+
+test('si gana la final quien viene del repechaje, es campeón sin final decisiva', () => {
+  const br = makeBracket(people(4));
+  let c;
+  while (!(c = compute(br)).podium){
+    const m = c.live[0];
+    addWin(br, m, m.id === 'GF' ? m.s[1] : m.s[0]);
+  }
+  assert.equal(c.podium[0], c.M.GF.s[1]);
+  assert.equal(c.podium[1], c.M.GF.s[0]);
+  // Un torneo guardado con la final decisiva antigua se limpia solo.
+  br.results.GF2 = c.podium[0]; br.pulls.GF2 = [c.podium[0]];
+  assert.equal(compute(br).podium[0], c.podium[0]);
+  assert.ok(!br.results.GF2 && !br.pulls.GF2);
 });

@@ -84,14 +84,14 @@ export function viewCategoria(S, catId, editable, confirmBtn){
   let W = '', L = '';
   for (let k = 1; k <= r.R; k++) W += column(roundName(byRound('W', k)[0], r.R, r.LR), byRound('W', k));
   for (let k = 1; k <= r.LR; k++) L += column(roundName(byRound('L', k)[0], r.R, r.LR), byRound('L', k));
-  const F = column('Final 1° y 2°', [r.M.GF]) + column('Final decisiva', [r.M.GF2]);
+  const F = column('Final 1° y 2°', [r.M.GF]);
   const pod = r.podium ? `<section class="panel podio"><h3>Podio ${c.label}</h3>${podiumList(S, br, r.podium)}</section>` : '';
   return `${pod}
     <div class="row" style="justify-content:space-between"><div><h2>${c.label}</h2><p class="muted">${br.entrants.length} competidores · ${r.played} de ${r.total} luchas jugadas</p></div>
     ${editable ? confirmBtn('reset-' + catId, 'Volver a sortear', 'Sí, borrar resultados y sortear', 'reset', `data-cat="${catId}"`) : ''}</div>
     <section class="bsec"><h3>Llave de ganadores <small>nadie ha perdido</small></h3><div class="rounds">${W}</div></section>
     <section class="bsec"><h3>Repechaje <small>una derrota; la segunda elimina</small></h3><div class="rounds">${L}</div></section>
-    <section class="bsec"><h3>Final <small>al mejor de 3 pulsos; si gana quien viene del repechaje, se juega una final decisiva</small></h3><div class="rounds">${F}</div></section>`;
+    <section class="bsec"><h3>Final <small>una sola lucha al mejor de 3 pulsos; quien la gana es campeón</small></h3><div class="rounds">${F}</div></section>`;
 }
 
 function podiumList(S, br, pod){
